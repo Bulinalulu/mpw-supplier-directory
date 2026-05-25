@@ -287,22 +287,22 @@ function triggerDownload(filename, contentB64) {
 
 function RFQGenerator({ suppliers, onGenerated }) {
   const today = new Date().toISOString().slice(0,10);
-  const [form, setForm]     = useState({ project:"", brbn:"", date:today, scope:"", closingTime:"12:00 PM", closingDate:"" });
-  const [items, setItems]   = useState([{ id:1, description:"", qty:"1", unit:"Each" }]);
-  const [selIds, setSelIds] = useState([]);
+  const [form, setForm]           = useState({ project:"", brbn:"", date:today, scope:"", closingTime:"12:00 PM", closingDate:"" });
+  const [items, setItems]         = useState([{ id:1, description:"", qty:"1", unit:"Each" }]);
+  const [selIds, setSelIds]       = useState([]);
+  const [recipientsNotes, setRecipientsNotes] = useState("");
   const [catFilter, setCatFilter] = useState("All");
   const [suppSearch, setSuppSearch] = useState("");
-  const [errors, setErrors] = useState({});
-  const [status, setStatus] = useState(null); // null | 'generating' | 'saving' | 'done' | 'error'
-  const [progress, setProgress] = useState({ done:0, total:0 });
-  const [genError, setGenError] = useState("");
+  const [errors, setErrors]       = useState({});
+  const [status, setStatus]       = useState(null);
+  const [genError, setGenError]   = useState("");
 
   const setF = (k,v) => setForm(f=>({...f,[k]:v}));
   const emailSuppliers = suppliers.filter(s=>s.email&&s.email.trim());
   const addItem = () => setItems(it=>[...it,{id:Date.now(),description:"",qty:"1",unit:"Each"}]);
   const removeItem = id => setItems(it=>it.filter(i=>i.id!==id));
   const setItem = (id,k,v) => setItems(it=>it.map(i=>i.id===id?{...i,[k]:v}:i));
-  const toggle = id => setSelIds(sel=>sel.includes(id)?sel.filter(s=>s!==id):sel.length<5?[...sel,id]:sel);
+  const toggle = id => setSelIds(sel=>sel.includes(id)?sel.filter(s=>s!==id):sel.length<10?[...sel,id]:sel);
 
   const visibleSuppliers = emailSuppliers.filter(s=>{
     if(catFilter!=="All"&&s.category!==catFilter) return false;
@@ -312,48 +312,49 @@ function RFQGenerator({ suppliers, onGenerated }) {
 
   const validate = () => {
     const e={};
-    if(!form.project.trim())          e.project   = "Required";
-    if(!form.brbn.trim())             e.brbn      = "Required";
-    if(!form.closingDate)             e.closingDate = "Required";
-    if(!items.some(i=>i.description.trim())) e.items = "Add at least one item";
-    if(selIds.length<3)               e.suppliers = `Select at least 3 (${selIds.length} selected)`;
+    if(!form.project.trim())               e.project    = "Required";
+    if(!form.brbn.trim())                  e.brbn       = "Required";
+    if(!form.closingDate)                  e.closingDate = "Required";
+    if(!items.some(i=>i.description.trim())) e.items    = "Add at least one item";
+    if(selIds.length < 3)                  e.recipients = `Select at least 3 suppliers (${selIds.length} selected)`;
     setErrors(e);
-    return Object.keys(e).length===0;
+    return Object.keys(e).length === 0;
   };
 
   const generate = async () => {
     if(!validate()) return;
-    const chosen = suppliers.filter(s=>selIds.includes(s.id));
-    setStatus("generating"); setGenError(""); setProgress({done:0,total:chosen.length});
+    setStatus("generating"); setGenError("");
 
     try {
-      // Call Netlify function
+      // Call Netlify function — single generic file, no supplier loop
       const resp = await fetch("/.netlify/functions/generate-rfq", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ form, items, suppliers: chosen.map(s=>({id:s.id,name:s.name})) }),
+        body: JSON.stringify({ form, items }),
       });
       if(!resp.ok) { const e=await resp.json().catch(()=>({error:"Server error"})); throw new Error(e.error||"Generation failed"); }
-      const { files } = await resp.json();
+      const { filename, contentB64 } = await resp.json();
 
-      // Download each file
-      files.forEach((f,i) => { setTimeout(()=>{ triggerDownload(f.filename, f.contentB64); setProgress(p=>({...p,done:i+1})); }, i*400); });
+      // Download the single generic file
+      triggerDownload(filename, contentB64);
 
-      // Save record to Supabase
+      // Save record — supplier selection is for record-keeping only
       setStatus("saving");
+      const chosen = suppliers.filter(s=>selIds.includes(s.id));
       await db.rfq.insert({
-        id:          "rfq_"+Date.now(),
-        brbn:        form.brbn,
-        project:     form.project,
-        doc_date:    form.date,
-        scope:       form.scope,
-        closing_time:form.closingTime,
-        closing_date:form.closingDate,
-        items:       JSON.stringify(items.filter(i=>i.description.trim())),
-        supplier_ids:   JSON.stringify(chosen.map(s=>s.id)),
-        supplier_names: JSON.stringify(chosen.map(s=>s.name)),
-        status:      "Draft",
-        created_at:  new Date().toISOString(),
-        updated_at:  new Date().toISOString(),
+        id:              "rfq_" + Date.now(),
+        brbn:            form.brbn,
+        project:         form.project,
+        doc_date:        form.date,
+        scope:           form.scope,
+        closing_time:    form.closingTime,
+        closing_date:    form.closingDate,
+        items:           JSON.stringify(items.filter(i=>i.description.trim())),
+        supplier_ids:    JSON.stringify(chosen.map(s=>s.id)),
+        supplier_names:  JSON.stringify(chosen.map(s=>s.name)),
+        recipients_notes: recipientsNotes.trim() || null,
+        status:          "Draft",
+        created_at:      new Date().toISOString(),
+        updated_at:      new Date().toISOString(),
       });
 
       setStatus("done");
@@ -366,7 +367,7 @@ function RFQGenerator({ suppliers, onGenerated }) {
   const reset = () => {
     setForm({project:"",brbn:"",date:today,scope:"",closingTime:"12:00 PM",closingDate:""});
     setItems([{id:1,description:"",qty:"1",unit:"Each"}]);
-    setSelIds([]); setStatus(null); setGenError(""); setErrors({});
+    setSelIds([]); setRecipientsNotes(""); setStatus(null); setGenError(""); setErrors({});
   };
 
   const card = { background:"#fff", border:"1px solid #e5e7eb", borderRadius:10, padding:"20px", marginBottom:16 };
@@ -376,7 +377,7 @@ function RFQGenerator({ suppliers, onGenerated }) {
       <div style={{ fontSize:52, marginBottom:12 }}>✅</div>
       <h2 style={{ margin:"0 0 8px", color:"#166534", fontSize:20, fontWeight:800 }}>RFQ Generated Successfully</h2>
       <p style={{ color:"#6b7280", fontSize:14, marginBottom:24 }}>
-        {selIds.length} document{selIds.length!==1?"s":""} downloaded · Record saved to RFQ History
+        Generic RFQ downloaded · Recipients recorded · Saved to RFQ History
       </p>
       <div style={{ display:"flex", gap:10, justifyContent:"center", flexWrap:"wrap" }}>
         <button onClick={reset} style={{ padding:"11px 24px", borderRadius:8, border:"none", background:"#1F3864", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer" }}>+ New RFQ</button>
@@ -447,9 +448,9 @@ function RFQGenerator({ suppliers, onGenerated }) {
         <button onClick={addItem} style={{ marginTop:12, padding:"7px 16px", borderRadius:6, border:"1px dashed #93c5fd", background:"#eff6ff", cursor:"pointer", fontSize:12, color:"#1d4ed8", fontWeight:600 }}>+ Add item</button>
       </div>
 
-      {/* 3 — Supplier Selection */}
+      {/* 3 — Recipients */}
       <div style={card}>
-        <SectionHead n="3" title="Select Suppliers" sub="3–5 required — one RFQ document per supplier" />
+        <SectionHead n="3" title="Recipients" sub="Select min 3 from directory for record-keeping — does not affect the document" />
         <div style={{ display:"flex", gap:6, marginBottom:10 }}>
           <input value={suppSearch} onChange={e=>setSuppSearch(e.target.value)} placeholder="Search suppliers…" style={{ ...iStyle, flex:1, padding:"7px 10px", fontSize:12 }} />
           <select value={catFilter} onChange={e=>setCatFilter(e.target.value)} style={{ ...iStyle, width:"auto", padding:"7px 10px", fontSize:12, flexShrink:0 }}>
@@ -458,15 +459,15 @@ function RFQGenerator({ suppliers, onGenerated }) {
           </select>
         </div>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-          <span style={{ fontSize:12, color:"#6b7280" }}>{emailSuppliers.length} RFQ-ready</span>
+          <span style={{ fontSize:12, color:"#6b7280" }}>{emailSuppliers.length} in directory</span>
           <span style={{ fontSize:12, fontWeight:700, color:selIds.length>=3?"#16a34a":selIds.length>0?"#ca8a04":"#9ca3af" }}>
             {selIds.length} selected {selIds.length>=3?"✓":selIds.length>0?`(need ${3-selIds.length} more)`:"(min 3)"}
           </span>
         </div>
-        {errors.suppliers && <p style={{ margin:"0 0 8px", fontSize:11, color:"#ef4444" }}>{errors.suppliers}</p>}
+        {errors.recipients && <p style={{ margin:"0 0 8px", fontSize:11, color:"#ef4444" }}>{errors.recipients}</p>}
         {visibleSuppliers.length===0
           ? <p style={{ textAlign:"center", color:"#9ca3af", fontSize:13, padding:"20px 0" }}>No suppliers match. <button onClick={()=>{setCatFilter("All");setSuppSearch("");}} style={{ background:"none",border:"none",color:"#3b82f6",cursor:"pointer",fontSize:13 }}>Clear</button></p>
-          : <div style={{ display:"flex", flexDirection:"column", gap:6, maxHeight:320, overflowY:"auto" }}>
+          : <div style={{ display:"flex", flexDirection:"column", gap:6, maxHeight:300, overflowY:"auto", marginBottom:14 }}>
               {visibleSuppliers.map(s=>{
                 const sel=selIds.includes(s.id);
                 return (
@@ -484,16 +485,30 @@ function RFQGenerator({ suppliers, onGenerated }) {
               })}
             </div>
         }
-        {suppliers.filter(s=>!s.email||!s.email.trim()).length>0 && <p style={{ margin:"10px 0 0", fontSize:11, color:"#9ca3af" }}>⚠ {suppliers.filter(s=>!s.email||!s.email.trim()).length} supplier(s) hidden — no email on file.</p>}
+        {suppliers.filter(s=>!s.email||!s.email.trim()).length>0 && <p style={{ margin:"0 0 12px", fontSize:11, color:"#9ca3af" }}>⚠ {suppliers.filter(s=>!s.email||!s.email.trim()).length} supplier(s) hidden — no email on file.</p>}
+
+        {/* Additional recipients not in directory */}
+        <div style={{ borderTop:"1px solid #f3f4f6", paddingTop:14 }}>
+          <label style={{ display:"block", fontSize:12, fontWeight:600, color:"#374151", marginBottom:4 }}>
+            Additional recipients <span style={{ fontWeight:400, color:"#9ca3af" }}>(not in directory — optional)</span>
+          </label>
+          <textarea
+            value={recipientsNotes}
+            onChange={e=>setRecipientsNotes(e.target.value)}
+            placeholder="e.g. Haroon's Hardware (hand-delivered), Pacific Rentals (walk-in)"
+            style={{ ...iStyle, minHeight:64, resize:"vertical", fontSize:12 }}
+          />
+          <p style={{ margin:"4px 0 0", fontSize:11, color:"#9ca3af" }}>Saved to the record for reference — does not affect the document.</p>
+        </div>
       </div>
 
       {/* Generate */}
       {genError && <p style={{ margin:"0 0 10px", fontSize:12, color:"#dc2626", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:7, padding:"10px 14px" }}>⚠ {genError}</p>}
       <button onClick={generate} disabled={!!status&&status!=="error"}
         style={{ width:"100%", padding:"14px", borderRadius:9, border:"none", background:(status==="generating"||status==="saving")?"#93c5fd":"#1F3864", color:"#fff", fontSize:15, fontWeight:700, cursor:(status==="generating"||status==="saving")?"not-allowed":"pointer", boxShadow:"0 2px 12px rgba(31,56,100,0.3)", marginBottom:8 }}>
-        {status==="generating" ? `⚙ Generating docs on server…`
-          : status==="saving"  ? `💾 Saving to history…`
-          : `Generate ${selIds.length>0?selIds.length+" ":""}RFQ Document${selIds.length!==1?"s":""}  ↓`}
+        {status==="generating" ? "⚙  Generating on server…"
+          : status==="saving"  ? "💾  Saving to history…"
+          : "Generate Generic RFQ  ↓"}
       </button>
     </div>
   );
@@ -602,11 +617,14 @@ function RFQCard({ record, suppliers, onAdvance, updating }) {
           </div>
         </div>
 
-        {/* Supplier chips */}
+        {/* Recipient chips */}
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:10 }}>
           {supplierNames.map((name,i)=>(
             <span key={i} style={{ background:"#f1f5f9", borderRadius:4, padding:"2px 8px", fontSize:11, color:"#475569", fontWeight:500 }}>👤 {name}</span>
           ))}
+          {record.recipients_notes && (
+            <span style={{ background:"#fef9c3", borderRadius:4, padding:"2px 8px", fontSize:11, color:"#713f12", fontWeight:500 }}>✚ {record.recipients_notes}</span>
+          )}
         </div>
       </div>
 
