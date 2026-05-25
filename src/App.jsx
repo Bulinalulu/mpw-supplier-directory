@@ -20,7 +20,14 @@ const db = {
   rfq: {
     list:   ()       => fetch(`${SUPABASE_URL}/rest/v1/rfq_records?order=created_at.desc`, { headers: HDR }).then(r => r.json()),
     insert: (row)    => fetch(`${SUPABASE_URL}/rest/v1/rfq_records`, { method:"POST", headers: HDR, body: JSON.stringify(row) }).then(r => r.json()),
-    updateStatus: (id, status) => fetch(`${SUPABASE_URL}/rest/v1/rfq_records?id=eq.${id}`, { method:"PATCH", headers: HDR, body: JSON.stringify({ status, updated_at: new Date().toISOString() }) }).then(r => r.json()),
+    updateStatus: (record, newStatus) => {
+      const entry = { from: record.status, to: newStatus, at: new Date().toISOString() };
+      const history = [...(record.status_history || []), entry];
+      return fetch(`${SUPABASE_URL}/rest/v1/rfq_records?id=eq.${record.id}`, {
+        method:"PATCH", headers: HDR,
+        body: JSON.stringify({ status: newStatus, status_history: history, updated_at: new Date().toISOString() })
+      }).then(r => r.json());
+    },
   },
 };
 
@@ -34,9 +41,9 @@ const SCOPE_PRESETS = [
 ];
 
 const STATUS_META = {
-  Draft:  { color:"#b45309", bg:"#fef3c7", border:"#fde68a", next:"Issued",  action:"Mark as Issued"  },
-  Issued: { color:"#1d4ed8", bg:"#eff6ff", border:"#bfdbfe", next:"Closed",  action:"Mark as Closed"  },
-  Closed: { color:"#166534", bg:"#f0fdf4", border:"#bbf7d0", next:null,      action:null               },
+  Draft:  { color:"#b45309", bg:"#fef3c7", border:"#fde68a", next:"Issued", nextLabel:"Mark as Issued", prev:null,    prevLabel:null              },
+  Issued: { color:"#1d4ed8", bg:"#eff6ff", border:"#bfdbfe", next:"Closed", nextLabel:"Mark as Closed", prev:"Draft", prevLabel:"Revert to Draft"  },
+  Closed: { color:"#166534", bg:"#f0fdf4", border:"#bbf7d0", next:null,     nextLabel:null,              prev:"Issued",prevLabel:"Revert to Issued" },
 };
 
 const SEED_SUPPLIERS = [
@@ -514,6 +521,146 @@ function RFQGenerator({ suppliers, onGenerated }) {
   );
 }
 
+// ── RFQ Document Preview Modal ─────────────────────────────────────────────
+
+const TC_CLAUSES = [
+  (brbn) => `All quotations must be submitted on the firm\u2019s official letterhead and must clearly state the quotation number. Quotations may be delivered by hand, emailed, or placed in the designated quotation box marked BRBN ${brbn} in a sealed envelope with the quotation number clearly indicated on the outside.`,
+  () => `All quoted prices shall remain firm for a minimum period of thirty (30) days from the closing date of the quotation.`,
+  () => `All materials and fittings supplied must comply with the relevant Government standards and specifications. Any items found not to meet the required standards will be rejected, and consideration may be given to the next lowest quotation.`,
+  () => `All items quoted must be available ex-stock.`,
+  () => `The brand name and specifications of all products offered must be clearly stated in the quotation.`,
+  () => `Relevant sample products, catalogues, brochures, or technical literature must be submitted together with the quotation for evaluation purposes.`,
+  () => `Late quotations will not be considered.`,
+  () => `Quotations submitted on the standard quotation form will not be accepted.`,
+  () => `Failure to comply with any of the above terms and conditions may result in the quotation being deemed invalid.`,
+];
+
+function fmtPreviewDate(d) {
+  if (!d) return "";
+  try { return new Date(d + "T00:00:00").toLocaleDateString("en-FJ", { day:"numeric", month:"long", year:"numeric" }); }
+  catch { return d; }
+}
+
+function RFQPreviewModal({ record, onClose }) {
+  let items = [], supplierNames = [];
+  try { items = JSON.parse(record.items || "[]"); } catch {}
+  try { supplierNames = JSON.parse(record.supplier_names || "[]"); } catch {}
+
+  const allRecipients = [
+    ...supplierNames,
+    ...(record.recipients_notes ? [record.recipients_notes] : [])
+  ].filter(Boolean).join(", ");
+
+  const docStyle = {
+    background:"#fff", width:"100%", maxWidth:740,
+    fontFamily:"Arial, sans-serif", fontSize:11, color:"#000",
+    lineHeight:1.5, padding:"40px 48px", boxSizing:"border-box",
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:2000, display:"flex", flexDirection:"column", alignItems:"center", padding:"16px", overflowY:"auto" }} onClick={onClose}>
+      {/* Toolbar */}
+      <div style={{ width:"100%", maxWidth:740, display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
+        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <StatusBadge status={record.status} />
+          <span style={{ color:"#e2e8f0", fontSize:13, fontWeight:600 }}>BRBN {record.brbn} — {record.project}</span>
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={()=>window.print()} style={{ padding:"7px 16px", borderRadius:6, border:"none", background:"#1F3864", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer" }}>🖨 Print</button>
+          <button onClick={onClose} style={{ padding:"7px 16px", borderRadius:6, border:"none", background:"#374151", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer" }}>✕ Close</button>
+        </div>
+      </div>
+
+      {/* Document */}
+      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", maxWidth:740, boxShadow:"0 8px 40px rgba(0,0,0,0.4)", flexShrink:0, marginBottom:32 }}>
+        {/* Header band */}
+        <div style={{ background:"#1F3864", padding:"14px 48px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div>
+            <p style={{ margin:0, color:"#fff", fontFamily:"Arial,sans-serif", fontSize:13, fontWeight:700, letterSpacing:"0.04em" }}>DIVISIONAL ENGINEER WORKS WESTERN</p>
+            <p style={{ margin:0, color:"#93c5fd", fontFamily:"Arial,sans-serif", fontSize:10 }}>Ministry of Public Works</p>
+          </div>
+          <div style={{ width:56, height:56, borderRadius:4, background:"rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <span style={{ fontSize:24 }}>🏛</span>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={docStyle}>
+          {/* Title block */}
+          <table style={{ width:"100%", marginBottom:14 }}><tbody><tr>
+            <td style={{ fontWeight:700, fontSize:13 }}>Request For Quotation:&nbsp;&nbsp;{record.project}</td>
+            <td style={{ textAlign:"right", whiteSpace:"nowrap" }}>
+              <div style={{ fontSize:11 }}>Quotation No. BRBN {record.brbn}</div>
+              <div style={{ fontSize:11 }}>{fmtPreviewDate(record.doc_date)}</div>
+            </td>
+          </tr></tbody></table>
+
+          <p style={{ margin:"0 0 4px", fontSize:11 }}>Dear Madam/Sir,</p>
+          <p style={{ margin:"0 0 10px", fontSize:11 }}>
+            You are invited to provide quotations for the following items. Please provide VIP prices only and place Company&rsquo;s seal.
+          </p>
+
+          {/* Scope */}
+          {record.scope && <p style={{ margin:"0 0 14px", fontSize:11 }}>{record.scope}</p>}
+
+          {/* Items table */}
+          <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:16, fontSize:11 }}>
+            <thead>
+              <tr style={{ background:"#1F3864", color:"#fff" }}>
+                {["Item","Item Description","Qty","Unit","Unit Cost","Total Cost (VIP)","Remarks"].map(h=>(
+                  <th key={h} style={{ padding:"5px 6px", textAlign:"left", border:"1px solid #ccc", fontWeight:700, fontSize:10 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {items.length===0
+                ? <tr><td colSpan={7} style={{ padding:"8px 6px", border:"1px solid #ccc", color:"#9ca3af", fontSize:10, fontStyle:"italic" }}>No items</td></tr>
+                : items.map((item,i)=>(
+                  <tr key={i} style={{ background:i%2===0?"#f9fafb":"#fff" }}>
+                    <td style={{ padding:"5px 6px", border:"1px solid #ccc", textAlign:"center" }}>{i+1}</td>
+                    <td style={{ padding:"5px 6px", border:"1px solid #ccc" }}>{item.description}</td>
+                    <td style={{ padding:"5px 6px", border:"1px solid #ccc", textAlign:"right" }}>{item.qty}</td>
+                    <td style={{ padding:"5px 6px", border:"1px solid #ccc" }}>{item.unit}</td>
+                    <td style={{ padding:"5px 6px", border:"1px solid #ccc" }}>&nbsp;</td>
+                    <td style={{ padding:"5px 6px", border:"1px solid #ccc" }}>&nbsp;</td>
+                    <td style={{ padding:"5px 6px", border:"1px solid #ccc" }}>&nbsp;</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+
+          {/* T&C */}
+          <p style={{ margin:"0 0 4px", fontWeight:700, fontSize:11 }}>Following Terms and Condition will apply:</p>
+          <ol style={{ margin:"0 0 14px", paddingLeft:20, fontSize:10.5, lineHeight:1.6 }}>
+            {TC_CLAUSES.map((fn,i)=><li key={i} style={{ marginBottom:3 }}>{fn(record.brbn)}</li>)}
+          </ol>
+
+          {/* Closing */}
+          <p style={{ margin:"0 0 16px", fontSize:11 }}>
+            This quotation closes at <strong>{record.closing_time}</strong>, on <strong>{fmtPreviewDate(record.closing_date)}</strong>.
+          </p>
+
+          {/* Signature */}
+          <div style={{ borderTop:"1px solid #e5e7eb", paddingTop:12 }}>
+            <p style={{ margin:"0 0 2px", fontWeight:700, fontSize:11 }}>Esala Cagimaicama</p>
+            <p style={{ margin:"0 0 2px", fontSize:11 }}>Mob # : (+679) 9368883</p>
+            <p style={{ margin:"0 0 2px", fontSize:11 }}>For Divisional Engineer Works West</p>
+            <p style={{ margin:0, fontSize:11 }}>Email: ecagimaicama@yahoo.com</p>
+          </div>
+        </div>
+
+        {/* Footer band */}
+        <div style={{ background:"#f1f5f9", borderTop:"2px solid #1F3864", padding:"7px 48px", display:"flex", justifyContent:"space-between", fontSize:9.5, color:"#475569", fontFamily:"Arial,sans-serif" }}>
+          <span>BRBN {record.brbn}</span>
+          <span>{record.project}</span>
+          <span>{fmtPreviewDate(record.doc_date)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── RFQ History ────────────────────────────────────────────────────────────
 
 function RFQHistory({ suppliers }) {
@@ -522,6 +669,7 @@ function RFQHistory({ suppliers }) {
   const [error,   setError]   = useState(null);
   const [updating, setUpdating] = useState(null);
   const [filter, setFilter] = useState("All");
+  const [preview, setPreview] = useState(null); // record to preview
 
   const load = async () => {
     setError(null);
@@ -535,13 +683,15 @@ function RFQHistory({ suppliers }) {
 
   useEffect(()=>{ load(); },[]);
 
-  const advanceStatus = async (record) => {
-    const next = STATUS_META[record.status]?.next;
-    if(!next) return;
-    setUpdating(record.id);
+  const changeStatus = async (record, newStatus) => {
+    setUpdating(record.id + newStatus);
     try {
-      await db.rfq.updateStatus(record.id, next);
-      setRecords(rs=>rs.map(r=>r.id===record.id?{...r,status:next}:r));
+      await db.rfq.updateStatus(record, newStatus);
+      const entry = { from: record.status, to: newStatus, at: new Date().toISOString() };
+      setRecords(rs => rs.map(r => r.id === record.id
+        ? { ...r, status: newStatus, status_history: [...(r.status_history||[]), entry] }
+        : r
+      ));
     } catch { /* ignore */ }
     setUpdating(null);
   };
@@ -571,20 +721,25 @@ function RFQHistory({ suppliers }) {
             <p style={{ color:"#6b7280", fontSize:14, margin:0 }}>{filter==="All"?"No RFQs generated yet.":"No RFQs with status: "+filter}</p>
           </div>
         : <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-            {filtered.map(r=><RFQCard key={r.id} record={r} suppliers={suppliers} onAdvance={advanceStatus} updating={updating===r.id} />)}
+            {filtered.map(r=><RFQCard key={r.id} record={r} onChangeStatus={changeStatus} updating={updating} onPreview={()=>setPreview(r)} />)}
           </div>
       }
+
+      {preview && <RFQPreviewModal record={preview} onClose={()=>setPreview(null)} />}
     </div>
   );
 }
 
-function RFQCard({ record, suppliers, onAdvance, updating }) {
+function RFQCard({ record, onChangeStatus, updating, onPreview }) {
   const [open, setOpen] = useState(false);
   const meta = STATUS_META[record.status] || STATUS_META.Draft;
 
-  let items = [], supplierNames = [];
+  let items = [], supplierNames = [], statusHistory = [];
   try { items = JSON.parse(record.items || "[]"); } catch {}
   try { supplierNames = JSON.parse(record.supplier_names || "[]"); } catch {}
+  try { statusHistory = record.status_history || []; } catch {}
+
+  const isUpdating = id => updating === id;
 
   return (
     <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden", transition:"box-shadow 0.15s" }}
@@ -604,15 +759,30 @@ function RFQCard({ record, suppliers, onAdvance, updating }) {
               Generated {fmtTs(record.created_at)} · Closes {fmt(record.closing_date)} at {record.closing_time}
             </p>
           </div>
-          <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
-            {meta.action && (
-              <button onClick={()=>onAdvance(record)} disabled={updating}
-                style={{ padding:"6px 14px", borderRadius:6, border:`1px solid ${meta.border}`, background:meta.bg, color:meta.color, cursor:updating?"not-allowed":"pointer", fontSize:12, fontWeight:700, whiteSpace:"nowrap" }}>
-                {updating ? <Spinner size={14} /> : meta.action}
+
+          {/* Action buttons */}
+          <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0, flexWrap:"wrap" }}>
+            {/* View button */}
+            <button onClick={onPreview}
+              style={{ padding:"6px 14px", borderRadius:6, border:"1px solid #d1d5db", background:"#f9fafb", color:"#374151", cursor:"pointer", fontSize:12, fontWeight:600 }}>
+              👁 View
+            </button>
+            {/* Revert button */}
+            {meta.prev && (
+              <button onClick={()=>onChangeStatus(record, meta.prev)} disabled={!!updating}
+                style={{ padding:"6px 14px", borderRadius:6, border:"1px solid #e5e7eb", background:"#fff", color:"#6b7280", cursor:updating?"not-allowed":"pointer", fontSize:12, fontWeight:500 }}>
+                {isUpdating(record.id + meta.prev) ? <Spinner size={14}/> : `↩ ${meta.prevLabel}`}
+              </button>
+            )}
+            {/* Advance button */}
+            {meta.next && (
+              <button onClick={()=>onChangeStatus(record, meta.next)} disabled={!!updating}
+                style={{ padding:"6px 14px", borderRadius:6, border:`1px solid ${meta.border}`, background:meta.bg, color:meta.color, cursor:updating?"not-allowed":"pointer", fontSize:12, fontWeight:700 }}>
+                {isUpdating(record.id + meta.next) ? <Spinner size={14}/> : meta.nextLabel}
               </button>
             )}
             <button onClick={()=>setOpen(o=>!o)} style={{ padding:"6px 12px", borderRadius:6, border:"1px solid #e5e7eb", background:"#f9fafb", cursor:"pointer", fontSize:12, color:"#6b7280" }}>
-              {open?"▲ Less":"▼ Details"}
+              {open?"▲":"▼"}
             </button>
           </div>
         </div>
@@ -632,14 +802,19 @@ function RFQCard({ record, suppliers, onAdvance, updating }) {
       {open && (
         <div style={{ borderTop:"1px solid #f3f4f6", padding:"14px 16px 16px", animation:"fadeIn 0.15s ease" }}>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px 24px", marginBottom:16 }}>
-            <div><p style={{ margin:"0 0 2px", fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.05em" }}>Scope of Works</p><p style={{ margin:0, fontSize:12, color:"#374151", lineHeight:1.6 }}>{record.scope||"—"}</p></div>
             <div>
-              <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.05em" }}>Closing</p>
+              <p style={{ margin:"0 0 2px", fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.05em" }}>Scope of Works</p>
+              <p style={{ margin:0, fontSize:12, color:"#374151", lineHeight:1.6 }}>{record.scope||"—"}</p>
+            </div>
+            <div>
+              <p style={{ margin:"0 0 4px", fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.05em" }}>Closing</p>
               <p style={{ margin:0, fontSize:12, color:"#374151" }}>{fmt(record.closing_date)} at {record.closing_time}</p>
             </div>
           </div>
+
+          {/* Items */}
           <p style={{ margin:"0 0 8px", fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.05em" }}>Line Items</p>
-          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, marginBottom:16 }}>
             <thead><tr style={{ background:"#f8fafc" }}>
               {["#","Description","Qty","Unit"].map(h=><th key={h} style={{ padding:"6px 8px", textAlign:"left", borderBottom:"1px solid #e5e7eb", fontWeight:600, color:"#6b7280", fontSize:11 }}>{h}</th>)}
             </tr></thead>
@@ -657,6 +832,25 @@ function RFQCard({ record, suppliers, onAdvance, updating }) {
               }
             </tbody>
           </table>
+
+          {/* Status history */}
+          {statusHistory.length > 0 && (
+            <>
+              <p style={{ margin:"0 0 8px", fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.05em" }}>Status History</p>
+              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                  <span style={{ fontSize:11, color:"#9ca3af", width:130, flexShrink:0 }}>{fmtTs(record.created_at)}</span>
+                  <span style={{ fontSize:11, color:"#374151" }}>Created as <strong>Draft</strong></span>
+                </div>
+                {statusHistory.map((h,i)=>(
+                  <div key={i} style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    <span style={{ fontSize:11, color:"#9ca3af", width:130, flexShrink:0 }}>{fmtTs(h.at)}</span>
+                    <span style={{ fontSize:11, color:"#374151" }}>Changed from <strong>{h.from}</strong> → <strong>{h.to}</strong></span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
