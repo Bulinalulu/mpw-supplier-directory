@@ -338,7 +338,7 @@ export default function App() {
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:14, marginBottom:16 }}>
               <div>
                 <p style={{ margin:"0 0 3px", fontSize:11, color:"#93c5fd", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase" }}>Ministry of Public Works — Divisional Engineer Works West</p>
-                <h1 style={{ margin:0, fontSize:24, fontWeight:800, color:"#fff", letterSpacing:"-0.02em" }}>Supplier Directory</h1>
+                <h1 style={{ margin:0, fontSize:24, fontWeight:800, color:"#fff", letterSpacing:"-0.02em" }}>Supplier Directory</h1><p style={{ margin:"4px 0 0", fontSize:11, color:"#bfdbfe" }}>v1.1 — includes website field</p>
               </div>
               <button onClick={() => setModal({ type:"add" })} style={{ padding:"10px 20px", borderRadius:8, border:"none", background:"#3b82f6", cursor:"pointer", fontSize:13, color:"#fff", fontWeight:700, boxShadow:"0 2px 10px rgba(59,130,246,0.4)", whiteSpace:"nowrap" }}>
                 + Add Supplier
