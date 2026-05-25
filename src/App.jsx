@@ -523,44 +523,64 @@ function RFQGenerator({ suppliers, onGenerated }) {
 
 // ── RFQ Document Preview Modal ─────────────────────────────────────────────
 
-const TC_CLAUSES = [
-  (brbn) => `All quotations must be submitted on the firm\u2019s official letterhead and must clearly state the quotation number. Quotations may be delivered by hand, emailed, or placed in the designated quotation box marked BRBN ${brbn} in a sealed envelope with the quotation number clearly indicated on the outside.`,
-  () => `All quoted prices shall remain firm for a minimum period of thirty (30) days from the closing date of the quotation.`,
-  () => `All materials and fittings supplied must comply with the relevant Government standards and specifications. Any items found not to meet the required standards will be rejected, and consideration may be given to the next lowest quotation.`,
-  () => `All items quoted must be available ex-stock.`,
-  () => `The brand name and specifications of all products offered must be clearly stated in the quotation.`,
-  () => `Relevant sample products, catalogues, brochures, or technical literature must be submitted together with the quotation for evaluation purposes.`,
-  () => `Late quotations will not be considered.`,
-  () => `Quotations submitted on the standard quotation form will not be accepted.`,
-  () => `Failure to comply with any of the above terms and conditions may result in the quotation being deemed invalid.`,
-];
-
-function fmtPreviewDate(d) {
-  if (!d) return "";
-  try { return new Date(d + "T00:00:00").toLocaleDateString("en-FJ", { day:"numeric", month:"long", year:"numeric" }); }
-  catch { return d; }
-}
-
 function RFQPreviewModal({ record, onClose }) {
-  let items = [], supplierNames = [];
-  try { items = JSON.parse(record.items || "[]"); } catch {}
-  try { supplierNames = JSON.parse(record.supplier_names || "[]"); } catch {}
+  const containerRef = useRef(null);
+  const styleRef     = useRef(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
 
-  const allRecipients = [
-    ...supplierNames,
-    ...(record.recipients_notes ? [record.recipients_notes] : [])
-  ].filter(Boolean).join(", ");
+  useEffect(() => {
+    let cancelled = false;
+    async function render() {
+      try {
+        // Reconstruct form + items from saved record
+        const form = {
+          project:     record.project,
+          brbn:        record.brbn,
+          date:        record.doc_date,
+          scope:       record.scope,
+          closingTime: record.closing_time,
+          closingDate: record.closing_date,
+        };
+        const items = JSON.parse(record.items || "[]");
 
-  const docStyle = {
-    background:"#fff", width:"100%", maxWidth:740,
-    fontFamily:"Arial, sans-serif", fontSize:11, color:"#000",
-    lineHeight:1.5, padding:"40px 48px", boxSizing:"border-box",
-  };
+        // Re-generate the docx via the Netlify function
+        const resp = await fetch("/.netlify/functions/generate-rfq", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ form, items }),
+        });
+        if (!resp.ok) throw new Error("Failed to generate preview");
+        const { contentB64 } = await resp.json();
+
+        if (cancelled) return;
+
+        // Convert base64 → Blob
+        const bytes = Uint8Array.from(atob(contentB64), c => c.charCodeAt(0));
+        const blob  = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+
+        // Render with docx-preview into the container div
+        const { renderAsync } = await import("docx-preview");
+        await renderAsync(blob, containerRef.current, styleRef.current, {
+          inWrapper:    true,
+          ignoreWidth:  false,
+          ignoreHeight: false,
+          breakPages:   true,
+        });
+
+        if (!cancelled) setLoading(false);
+      } catch (err) {
+        if (!cancelled) { setError(err.message); setLoading(false); }
+      }
+    }
+    render();
+    return () => { cancelled = true; };
+  }, [record.id]);
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:2000, display:"flex", flexDirection:"column", alignItems:"center", padding:"16px", overflowY:"auto" }} onClick={onClose}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:2000, display:"flex", flexDirection:"column", alignItems:"center", padding:16, overflowY:"auto" }} onClick={onClose}>
       {/* Toolbar */}
-      <div style={{ width:"100%", maxWidth:740, display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
+      <div style={{ width:"100%", maxWidth:860, display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexShrink:0 }} onClick={e=>e.stopPropagation()}>
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
           <StatusBadge status={record.status} />
           <span style={{ color:"#e2e8f0", fontSize:13, fontWeight:600 }}>BRBN {record.brbn} — {record.project}</span>
@@ -571,91 +591,23 @@ function RFQPreviewModal({ record, onClose }) {
         </div>
       </div>
 
-      {/* Document */}
-      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", maxWidth:740, boxShadow:"0 8px 40px rgba(0,0,0,0.4)", flexShrink:0, marginBottom:32 }}>
-        {/* Header band */}
-        <div style={{ background:"#1F3864", padding:"14px 48px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <div>
-            <p style={{ margin:0, color:"#fff", fontFamily:"Arial,sans-serif", fontSize:13, fontWeight:700, letterSpacing:"0.04em" }}>DIVISIONAL ENGINEER WORKS WESTERN</p>
-            <p style={{ margin:0, color:"#93c5fd", fontFamily:"Arial,sans-serif", fontSize:10 }}>Ministry of Public Works</p>
+      {/* Rendered document */}
+      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", maxWidth:860, flexShrink:0, marginBottom:32, position:"relative", minHeight:400 }}>
+        {loading && (
+          <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:14, background:"#fff", borderRadius:8 }}>
+            <Spinner size={36} />
+            <p style={{ color:"#6b7280", fontSize:13, margin:0 }}>Rendering document…</p>
           </div>
-          <div style={{ width:56, height:56, borderRadius:4, background:"rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <span style={{ fontSize:24 }}>🏛</span>
+        )}
+        {error && (
+          <div style={{ padding:32, textAlign:"center", background:"#fff", borderRadius:8 }}>
+            <p style={{ color:"#dc2626", fontSize:13 }}>⚠ {error}</p>
           </div>
-        </div>
-
-        {/* Body */}
-        <div style={docStyle}>
-          {/* Title block */}
-          <table style={{ width:"100%", marginBottom:14 }}><tbody><tr>
-            <td style={{ fontWeight:700, fontSize:13 }}>Request For Quotation:&nbsp;&nbsp;{record.project}</td>
-            <td style={{ textAlign:"right", whiteSpace:"nowrap" }}>
-              <div style={{ fontSize:11 }}>Quotation No. BRBN {record.brbn}</div>
-              <div style={{ fontSize:11 }}>{fmtPreviewDate(record.doc_date)}</div>
-            </td>
-          </tr></tbody></table>
-
-          <p style={{ margin:"0 0 4px", fontSize:11 }}>Dear Madam/Sir,</p>
-          <p style={{ margin:"0 0 10px", fontSize:11 }}>
-            You are invited to provide quotations for the following items. Please provide VIP prices only and place Company&rsquo;s seal.
-          </p>
-
-          {/* Scope */}
-          {record.scope && <p style={{ margin:"0 0 14px", fontSize:11 }}>{record.scope}</p>}
-
-          {/* Items table */}
-          <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:16, fontSize:11 }}>
-            <thead>
-              <tr style={{ background:"#1F3864", color:"#fff" }}>
-                {["Item","Item Description","Qty","Unit","Unit Cost","Total Cost (VIP)","Remarks"].map(h=>(
-                  <th key={h} style={{ padding:"5px 6px", textAlign:"left", border:"1px solid #ccc", fontWeight:700, fontSize:10 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {items.length===0
-                ? <tr><td colSpan={7} style={{ padding:"8px 6px", border:"1px solid #ccc", color:"#9ca3af", fontSize:10, fontStyle:"italic" }}>No items</td></tr>
-                : items.map((item,i)=>(
-                  <tr key={i} style={{ background:i%2===0?"#f9fafb":"#fff" }}>
-                    <td style={{ padding:"5px 6px", border:"1px solid #ccc", textAlign:"center" }}>{i+1}</td>
-                    <td style={{ padding:"5px 6px", border:"1px solid #ccc" }}>{item.description}</td>
-                    <td style={{ padding:"5px 6px", border:"1px solid #ccc", textAlign:"right" }}>{item.qty}</td>
-                    <td style={{ padding:"5px 6px", border:"1px solid #ccc" }}>{item.unit}</td>
-                    <td style={{ padding:"5px 6px", border:"1px solid #ccc" }}>&nbsp;</td>
-                    <td style={{ padding:"5px 6px", border:"1px solid #ccc" }}>&nbsp;</td>
-                    <td style={{ padding:"5px 6px", border:"1px solid #ccc" }}>&nbsp;</td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
-
-          {/* T&C */}
-          <p style={{ margin:"0 0 4px", fontWeight:700, fontSize:11 }}>Following Terms and Condition will apply:</p>
-          <ol style={{ margin:"0 0 14px", paddingLeft:20, fontSize:10.5, lineHeight:1.6 }}>
-            {TC_CLAUSES.map((fn,i)=><li key={i} style={{ marginBottom:3 }}>{fn(record.brbn)}</li>)}
-          </ol>
-
-          {/* Closing */}
-          <p style={{ margin:"0 0 16px", fontSize:11 }}>
-            This quotation closes at <strong>{record.closing_time}</strong>, on <strong>{fmtPreviewDate(record.closing_date)}</strong>.
-          </p>
-
-          {/* Signature */}
-          <div style={{ borderTop:"1px solid #e5e7eb", paddingTop:12 }}>
-            <p style={{ margin:"0 0 2px", fontWeight:700, fontSize:11 }}>Esala Cagimaicama</p>
-            <p style={{ margin:"0 0 2px", fontSize:11 }}>Mob # : (+679) 9368883</p>
-            <p style={{ margin:"0 0 2px", fontSize:11 }}>For Divisional Engineer Works West</p>
-            <p style={{ margin:0, fontSize:11 }}>Email: ecagimaicama@yahoo.com</p>
-          </div>
-        </div>
-
-        {/* Footer band */}
-        <div style={{ background:"#f1f5f9", borderTop:"2px solid #1F3864", padding:"7px 48px", display:"flex", justifyContent:"space-between", fontSize:9.5, color:"#475569", fontFamily:"Arial,sans-serif" }}>
-          <span>BRBN {record.brbn}</span>
-          <span>{record.project}</span>
-          <span>{fmtPreviewDate(record.doc_date)}</span>
-        </div>
+        )}
+        {/* docx-preview injects styles here */}
+        <div ref={styleRef} />
+        {/* docx-preview renders pages here */}
+        <div ref={containerRef} style={{ display:loading?"none":"block" }} />
       </div>
     </div>
   );
