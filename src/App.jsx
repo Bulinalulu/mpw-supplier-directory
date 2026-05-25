@@ -56,7 +56,7 @@ const SEED_SUPPLIERS = [
   { id:"sup_014", name:"Pacific Energy Fiji", email:"bulk@pacenergy.com.fj", phone:"+679 330 9900", address:"Walu Bay, Suva, Fiji", location:"Suva / Nadi (both)", category:"Fuel / Lubricants", specialties:"bulk fuel, lubricants, fuel storage solutions, tanker delivery", last_verified:"2026-03-30", tcc_reference:"TCC-2025-00344", tcc_issue_date:"2025-03-01", website:"", notes:"Can arrange Western Division deliveries via Nadi depot." },
 ];
 
-const EMPTY_FORM = { name:"", email:"", phone:"", address:"", location:"", category:CATEGORIES[0], specialties:"", last_verified:"", tcc_reference:"", tcc_issue_date:"", notes:"", website:"" };
+const EMPTY_FORM = { name:"", email:"", phone:"", address:"", location:"", category:CATEGORIES[0], specialties:"", last_verified:"", tcc_reference:"", tcc_issue_date:"", notes:"", website:"", contact_name:"", contact_position:"", contact_mobiles:"" };
 const CAT_COLOR  = { "Plant Hire":"#1F3864","Building Materials":"#2D6A4F","PPE / Safety":"#B5451B","Civil Works":"#4A4E69","Transport / Logistics":"#1B4F72","Office Supplies":"#6B3FA0","Fuel / Lubricants":"#7D4E1B" };
 
 const css = String.raw;
@@ -150,6 +150,10 @@ function SupplierForm({ initial, onSave, onCancel, saving }) {
         <Field label="Email" hint="Required to send RFQ"><input style={iStyle} type="email" value={form.email||""} onChange={e=>set("email",e.target.value)} placeholder="contact@example.com" /></Field>
         <Field label="Phone"><input style={iStyle} value={form.phone||""} onChange={e=>set("phone",e.target.value)} placeholder="+679 000 0000" /></Field>
         <div style={{ gridColumn:"1/-1" }}><Field label="Website"><input style={iStyle} type="url" value={form.website||""} onChange={e=>set("website",e.target.value)} placeholder="https://www.example.com" /></Field></div>
+        <div style={{ gridColumn:"1/-1", borderTop:"1px solid #f3f4f6", paddingTop:14, marginBottom:4 }}><p style={{ fontSize:11, fontWeight:700, color:"#1F3864", letterSpacing:"0.06em", margin:"0 0 10px", textTransform:"uppercase" }}>Contact Person</p></div>
+        <Field label="Contact Name"><input style={iStyle} value={form.contact_name||""} onChange={e=>set("contact_name",e.target.value)} placeholder="e.g. Mohammed Ridwan Haroon" /></Field>
+        <Field label="Position / Title"><input style={iStyle} value={form.contact_position||""} onChange={e=>set("contact_position",e.target.value)} placeholder="e.g. Director" /></Field>
+        <div style={{ gridColumn:"1/-1" }}><Field label="Mobile Number(s)" hint="Separate multiple numbers with a comma"><input style={iStyle} value={form.contact_mobiles||""} onChange={e=>set("contact_mobiles",e.target.value)} placeholder="e.g. 9917971, 7717971" /></Field></div>
         <Field label="Location"><input style={iStyle} value={form.location||""} onChange={e=>set("location",e.target.value)} placeholder="e.g. Nadi (Western Division)" /></Field>
         <div style={{ gridColumn:"1/-1" }}><Field label="Address"><input style={iStyle} value={form.address||""} onChange={e=>set("address",e.target.value)} placeholder="Street address" /></Field></div>
         <div style={{ gridColumn:"1/-1" }}><Field label="Specialties" hint="Comma-separated"><input style={iStyle} value={form.specialties||""} onChange={e=>set("specialties",e.target.value)} placeholder="e.g. plant hire, heavy machinery" /></Field></div>
@@ -195,6 +199,7 @@ function SupplierCard({ supplier, onEdit, onDelete }) {
               <StatusDot email={supplier.email} /><span style={{ fontWeight:700, fontSize:15, color:"#111827" }}>{supplier.name}</span><Badge category={supplier.category} />
             </div>
             {hasEmail ? <p style={{ margin:"0 0 2px", fontSize:12, color:"#6b7280" }}>✉ {supplier.email}</p> : <p style={{ margin:"0 0 2px", fontSize:12, color:"#f59e0b", fontWeight:600 }}>⚠ No email — cannot send RFQ</p>}
+            {supplier.contact_name && <p style={{ margin:"0 0 2px", fontSize:12, color:"#6b7280" }}>👤 {supplier.contact_name}{supplier.contact_position ? ` · ${supplier.contact_position}` : ""}{supplier.contact_mobiles ? ` · ${supplier.contact_mobiles}` : ""}</p>}
             {supplier.location && <p style={{ margin:0, fontSize:12, color:"#6b7280" }}>📍 {supplier.location}</p>}
           </div>
           <div style={{ display:"flex", gap:6, flexShrink:0 }}>
@@ -208,6 +213,16 @@ function SupplierCard({ supplier, onEdit, onDelete }) {
         <div style={{ padding:"12px 16px 16px", borderTop:"1px solid #f3f4f6", display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 20px", animation:"fadeIn 0.15s ease" }}>
           <DetailRow label="Phone" value={supplier.phone} />
           <DetailRow label="Last Verified" value={fmt(supplier.last_verified)} />
+          {(supplier.contact_name||supplier.contact_position||supplier.contact_mobiles) && (
+            <div style={{ gridColumn:"1/-1", background:"#f8fafc", borderRadius:7, padding:"10px 12px", border:"1px solid #e5e7eb" }}>
+              <p style={{ margin:"0 0 6px", fontSize:10, fontWeight:700, color:"#1F3864", textTransform:"uppercase", letterSpacing:"0.06em" }}>Contact Person</p>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"4px 16px" }}>
+                {supplier.contact_name     && <DetailRow label="Name"     value={supplier.contact_name} />}
+                {supplier.contact_position && <DetailRow label="Position" value={supplier.contact_position} />}
+                {supplier.contact_mobiles  && <DetailRow label="Mobile"   value={supplier.contact_mobiles} />}
+              </div>
+            </div>
+          )}
           {supplier.website && <div style={{ gridColumn:"1/-1" }}><p style={{ margin:"0 0 1px", fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.05em" }}>Website</p><a href={supplier.website} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#3b82f6", wordBreak:"break-all" }}>{supplier.website}</a></div>}
           <div style={{ gridColumn:"1/-1" }}><DetailRow label="Address" value={supplier.address} /></div>
           <div style={{ gridColumn:"1/-1" }}><DetailRow label="Specialties" value={supplier.specialties} /></div>
