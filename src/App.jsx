@@ -24,6 +24,8 @@ const db = {
   rfq: {
     list:   ()       => fetch(`${SUPABASE_URL}/rest/v1/rfq_records?order=created_at.desc`, { headers: HDR }).then(r => r.json()),
     insert: (row)    => fetch(`${SUPABASE_URL}/rest/v1/rfq_records`, { method:"POST", headers: HDR, body: JSON.stringify(row) }).then(r => r.json()),
+    update: (id, row) => fetch(`${SUPABASE_URL}/rest/v1/rfq_records?id=eq.${id}`, { method:"PATCH", headers: HDR, body: JSON.stringify(row) }).then(r => r.json()),
+    delete: (id)      => fetch(`${SUPABASE_URL}/rest/v1/rfq_records?id=eq.${id}`, { method:"DELETE", headers: HDR }).then(r => r.ok),
     updateStatus: (record, newStatus) => {
       const entry = { from: record.status, to: newStatus, at: new Date().toISOString() };
       const history = [...(record.status_history||[]), entry];
@@ -442,7 +444,7 @@ function triggerDownload(filename, contentB64) {
   setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
 
-function RFQGenerator({ suppliers, projects, onGenerated, onProjectsRefresh }) {
+function RFQGenerator({ suppliers, projects, onGenerated, onProjectCreated }) {
   const today = new Date().toISOString().slice(0,10);
   const [form, setForm]           = useState({ project:"", brbn:"", date:today, scope:"", closingTime:"12:00 PM", closingDate:"" });
   const [items, setItems]         = useState([{id:1,description:"",qty:"1",unit:"Each"}]);
@@ -481,7 +483,7 @@ function RFQGenerator({ suppliers, projects, onGenerated, onProjectsRefresh }) {
   const handleNewProject = async (projForm) => {
     const proj = { ...projForm, id:"proj_"+Date.now(), created_at:new Date().toISOString(), updated_at:new Date().toISOString() };
     await db.projects.insert(proj);
-    await onProjectsRefresh();
+    onProjectCreated(proj);
     setF("project", projForm.name);
     setNewProjModal(false);
   };
@@ -702,14 +704,147 @@ function RFQPreviewModal({ record, onClose }) {
   );
 }
 
+// ── RFQ Edit Modal ─────────────────────────────────────────────────────────
+function RFQEditModal({ record, projects, onSave, onClose }) {
+  const [form, setForm] = useState({
+    project: record.project || "",
+    brbn: record.brbn || "",
+    date: record.doc_date || "",
+    scope: record.scope || "",
+    closingTime: record.closing_time || "12:00 PM",
+    closingDate: record.closing_date || "",
+  });
+  let parsedItems = [];
+  try { parsedItems = JSON.parse(record.items || "[]"); } catch {}
+  if (!parsedItems.length) parsedItems = [{ id: 1, description: "", qty: "1", unit: "Each" }];
+  const [items, setItems]   = useState(parsedItems);
+  const [recipientsNotes, setRecipientsNotes] = useState(record.recipients_notes || "");
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
+  let supplierNames = [];
+  try { supplierNames = JSON.parse(record.supplier_names || "[]"); } catch {}
+
+  const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const addItem    = () => setItems(it => [...it, { id: Date.now(), description: "", qty: "1", unit: "Each" }]);
+  const removeItem = id => setItems(it => it.filter(i => i.id !== id));
+  const setItem    = (id, k, v) => setItems(it => it.map(i => i.id === id ? { ...i, [k]: v } : i));
+
+  const validate = () => {
+    const e = {};
+    if (!form.project.trim())  e.project = "Required";
+    if (!form.brbn.trim())     e.brbn = "Required";
+    if (!form.closingDate)     e.closingDate = "Required";
+    if (!items.some(i => i.description.trim())) e.items = "Add at least one item";
+    setErrors(e);
+    return !Object.keys(e).length;
+  };
+
+  const save = async () => {
+    if (!validate()) return;
+    setSaving(true);
+    await onSave(record.id, {
+      brbn: form.brbn, project: form.project, doc_date: form.date,
+      scope: form.scope, closing_time: form.closingTime, closing_date: form.closingDate,
+      items: JSON.stringify(items.filter(i => i.description.trim())),
+      recipients_notes: recipientsNotes.trim() || null,
+      updated_at: new Date().toISOString(),
+    });
+    setSaving(false);
+  };
+
+  return (
+    <W95Dialog title={`Edit RFQ — ${record.brbn}`} onClose={onClose} width={600}>
+      <div style={{ maxHeight:"70vh", overflowY:"auto", paddingRight:4 }}>
+        <W95GroupBox title="Project Details">
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 12px" }}>
+            <div style={{ gridColumn:"1/-1" }}>
+              <W95Field label={<span>Project {errors.project&&<span style={{color:"#800000"}}> — {errors.project}</span>}</span>}>
+                <div style={{ display:"flex", gap:4 }}>
+                  <select style={sel({flex:1})} value={form.project} onChange={e=>setF("project",e.target.value)}>
+                    <option value="">— Select —</option>
+                    {projects.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                  </select>
+                  <input style={inp({flex:1})} value={form.project} onChange={e=>setF("project",e.target.value)} placeholder="Or type…" />
+                </div>
+              </W95Field>
+            </div>
+            <W95Field label={<span>BRBN {errors.brbn&&<span style={{color:"#800000"}}> — {errors.brbn}</span>}</span>}>
+              <input style={inp()} value={form.brbn} onChange={e=>setF("brbn",e.target.value)} />
+            </W95Field>
+            <W95Field label="Document Date">
+              <input style={inp()} type="date" value={form.date} onChange={e=>setF("date",e.target.value)} />
+            </W95Field>
+            <W95Field label="Closing Time">
+              <select style={sel()} value={form.closingTime} onChange={e=>setF("closingTime",e.target.value)}>
+                {["9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM"].map(t=><option key={t}>{t}</option>)}
+              </select>
+            </W95Field>
+            <W95Field label={<span>Closing Date {errors.closingDate&&<span style={{color:"#800000"}}> — {errors.closingDate}</span>}</span>}>
+              <input style={inp()} type="date" value={form.closingDate} onChange={e=>setF("closingDate",e.target.value)} />
+            </W95Field>
+          </div>
+          <W95Field label="Scope of Works">
+            <textarea style={inp({minHeight:52,resize:"vertical"})} value={form.scope} onChange={e=>setF("scope",e.target.value)} />
+          </W95Field>
+        </W95GroupBox>
+
+        <W95GroupBox title="Line Items">
+          {errors.items && <p style={{color:"#800000",margin:"0 0 6px"}}>{errors.items}</p>}
+          <div style={{...W.sunken,background:"#fff",marginBottom:8,overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:400}}>
+              <thead>
+                <tr style={{background:"#c0c0c0"}}>
+                  {["#","Description","Qty","Unit",""].map((h,i)=>(
+                    <th key={i} style={{...W.raised,padding:"3px 6px",textAlign:"left"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item,idx)=>(
+                  <tr key={item.id} style={{borderBottom:"1px solid #e0e0e0"}}>
+                    <td style={{padding:"3px 6px",width:24,color:"#808080"}}>{idx+1}</td>
+                    <td style={{padding:"2px 4px"}}><input style={inp({padding:"2px 4px"})} value={item.description} onChange={e=>setItem(item.id,"description",e.target.value)} /></td>
+                    <td style={{padding:"2px 4px",width:70}}><input style={inp({padding:"2px 4px",textAlign:"right"})} type="number" min="0" step="0.01" value={item.qty} onChange={e=>setItem(item.id,"qty",e.target.value)} /></td>
+                    <td style={{padding:"2px 4px",width:90}}><select style={sel({padding:"2px 4px"})} value={item.unit} onChange={e=>setItem(item.id,"unit",e.target.value)}>{UNITS.map(u=><option key={u}>{u}</option>)}</select></td>
+                    <td style={{padding:"2px 4px",width:28,textAlign:"center"}}>{items.length>1&&<W95Btn onClick={()=>removeItem(item.id)} style={{padding:"0 6px",minWidth:0}}>✕</W95Btn>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <W95Btn onClick={addItem}>+ Add Item</W95Btn>
+        </W95GroupBox>
+
+        <W95GroupBox title="Recipients">
+          {supplierNames.length>0 && (
+            <div style={{...W.sunken,background:"#fff",padding:"4px 8px",marginBottom:8,fontSize:10}}>
+              {supplierNames.join(", ")}
+            </div>
+          )}
+          <W95Field label="Additional recipients / notes">
+            <input style={inp()} value={recipientsNotes} onChange={e=>setRecipientsNotes(e.target.value)} placeholder="e.g. Haroon's Hardware (hand-delivered)" />
+          </W95Field>
+        </W95GroupBox>
+      </div>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:6,marginTop:8,paddingTop:8,borderTop:"1px solid #808080"}}>
+        <W95Btn onClick={onClose} disabled={saving}>Cancel</W95Btn>
+        <W95Btn onClick={save} disabled={saving}>{saving?"Saving…":"OK"}</W95Btn>
+      </div>
+    </W95Dialog>
+  );
+}
+
 // ── RFQ Register ───────────────────────────────────────────────────────────
-function RFQRegister({ suppliers }) {
+function RFQRegister({ suppliers, projects }) {
   const [records,  setRecords]  = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState(null);
   const [updating, setUpdating] = useState(null);
   const [filter,   setFilter]   = useState("All");
   const [preview,  setPreview]  = useState(null);
+  const [editRecord,   setEditRecord]   = useState(null);
+  const [deleteRecord, setDeleteRecord] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [search,   setSearch]   = useState("");
 
   const load = async () => {
@@ -719,6 +854,20 @@ function RFQRegister({ suppliers }) {
     setLoading(false);
   };
   useEffect(()=>{ load(); },[]);
+
+  const handleSaveEdit = async (id, row) => {
+    await db.rfq.update(id, row);
+    setRecords(rs => rs.map(r => r.id === id ? { ...r, ...row, items: row.items } : r));
+    setEditRecord(null);
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    await db.rfq.delete(deleteRecord.id);
+    setRecords(rs => rs.filter(r => r.id !== deleteRecord.id));
+    setDeleteRecord(null);
+    setDeleting(false);
+  };
 
   const changeStatus = async (record, newStatus) => {
     setUpdating(record.id+newStatus);
@@ -756,7 +905,7 @@ function RFQRegister({ suppliers }) {
 
       {/* Table */}
       <div style={{ ...W.sunken, background:"#fff", minHeight:200, maxHeight:500, overflowY:"auto" }}>
-        <div style={{ display:"grid", gridTemplateColumns:"130px 2fr 90px 90px 80px 220px", background:"#c0c0c0", borderBottom:"2px solid #808080", position:"sticky", top:0 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"130px 2fr 90px 90px 80px 280px", background:"#c0c0c0", borderBottom:"2px solid #808080", position:"sticky", top:0 }}>
           {["BRBN","Project","Closing","Created","Status","Actions"].map(h=>(
             <div key={h} style={{ ...W.raised, padding:"3px 6px", fontWeight:"bold", fontSize:11 }}>{h}</div>
           ))}
@@ -770,6 +919,8 @@ function RFQRegister({ suppliers }) {
               return (
                 <RFQRow key={r.id} record={r} meta={meta} supplierNames={supplierNames}
                   onPreview={()=>setPreview(r)}
+                  onEdit={()=>setEditRecord(r)}
+                  onDelete={()=>setDeleteRecord(r)}
                   onAdvance={meta.next?()=>changeStatus(r,meta.next):null}
                   onRevert={meta.prev?()=>changeStatus(r,meta.prev):null}
                   advanceLabel={meta.nextLabel} revertLabel={meta.prevLabel}
@@ -779,26 +930,38 @@ function RFQRegister({ suppliers }) {
             })
         }
       </div>
-      {preview && <RFQPreviewModal record={preview} onClose={()=>setPreview(null)} />}
+      {preview      && <RFQPreviewModal record={preview} onClose={()=>setPreview(null)} />}
+      {editRecord   && <RFQEditModal record={editRecord} projects={projects||[]} onSave={handleSaveEdit} onClose={()=>setEditRecord(null)} />}
+      {deleteRecord && (
+        <W95Dialog title="Confirm Delete" onClose={()=>setDeleteRecord(null)} width={360}>
+          <p>Delete RFQ <strong>{deleteRecord.brbn}</strong> — {deleteRecord.project}?<br/>This cannot be undone.</p>
+          <div style={{ display:"flex", justifyContent:"flex-end", gap:6, marginTop:12 }}>
+            <W95Btn onClick={()=>setDeleteRecord(null)} disabled={deleting}>Cancel</W95Btn>
+            <W95Btn onClick={handleDelete} disabled={deleting}>{deleting?"Deleting…":"Delete"}</W95Btn>
+          </div>
+        </W95Dialog>
+      )}
     </div>
   );
 }
 
-function RFQRow({ record, meta, supplierNames, onPreview, onAdvance, onRevert, advanceLabel, revertLabel, updating }) {
+function RFQRow({ record, meta, supplierNames, onPreview, onEdit, onDelete, onAdvance, onRevert, advanceLabel, revertLabel, updating }) {
   const [expanded, setExpanded] = useState(false);
   let items=[],statusHistory=[];
   try{items=JSON.parse(record.items||"[]");}catch{}
   try{statusHistory=record.status_history||[];}catch{}
   return (
     <>
-      <div style={{ display:"grid", gridTemplateColumns:"130px 2fr 90px 90px 80px 220px", borderBottom:"1px solid #e0e0e0", cursor:"pointer" }} onClick={()=>setExpanded(o=>!o)}>
+      <div style={{ display:"grid", gridTemplateColumns:"130px 2fr 90px 90px 80px 280px", borderBottom:"1px solid #e0e0e0", cursor:"pointer" }} onClick={()=>setExpanded(o=>!o)}>
         <div style={{ padding:"3px 6px", fontWeight:"bold" }}>{record.brbn}</div>
         <div style={{ padding:"3px 6px" }}>{record.project}</div>
         <div style={{ padding:"3px 6px", fontSize:10 }}>{fmt(record.closing_date)}</div>
         <div style={{ padding:"3px 6px", fontSize:10 }}>{fmtTs(record.created_at)}</div>
         <div style={{ padding:"3px 6px", color:meta.color, fontWeight:"bold" }}>{record.status}</div>
-        <div style={{ padding:"2px 4px", display:"flex", gap:3, alignItems:"center" }} onClick={e=>e.stopPropagation()}>
+        <div style={{ padding:"2px 4px", display:"flex", gap:3, alignItems:"center", flexWrap:"wrap" }} onClick={e=>e.stopPropagation()}>
           <W95Btn onClick={onPreview} style={{ padding:"2px 6px", fontSize:10 }}>👁 View</W95Btn>
+          <W95Btn onClick={onEdit}    style={{ padding:"2px 6px", fontSize:10 }}>✏ Edit</W95Btn>
+          <W95Btn onClick={onDelete}  style={{ padding:"2px 6px", fontSize:10 }}>🗑 Del</W95Btn>
           {onRevert  && <W95Btn onClick={onRevert}  style={{ padding:"2px 6px", fontSize:10 }} disabled={updating}>{updating?<Spinner/>:revertLabel}</W95Btn>}
           {onAdvance && <W95Btn onClick={onAdvance} style={{ padding:"2px 6px", fontSize:10 }} disabled={updating}>{updating?<Spinner/>:advanceLabel}</W95Btn>}
         </div>
@@ -858,6 +1021,7 @@ export default function App() {
   };
   const loadProjects = async () => { const d=await db.projects.list(); if(Array.isArray(d)) setProjects(d); };
   const loadRFQs    = async () => { const d=await db.rfq.list();      if(Array.isArray(d)) setRfqRecords(d); };
+  const addLocalProject = (proj) => setProjects(ps => [...ps, proj].sort((a,b) => a.name.localeCompare(b.name)));
 
   useEffect(()=>{ loadSuppliers(); loadProjects(); loadRFQs(); },[]);
 
@@ -926,8 +1090,8 @@ export default function App() {
           <div style={{ background:"#c0c0c0", minHeight:400, maxHeight:"calc(100vh - 120px)", overflowY:"auto" }}>
             {tab==="projects"    && <ProjectRegister projects={projects} rfqRecords={rfqRecords} loading={loading} onRefresh={async()=>{await loadProjects();await loadRFQs();}} />}
             {tab==="suppliers"   && <SupplierDirectory suppliers={suppliers} loading={loading} onRefresh={loadSuppliers} onAdd={()=>setModal({type:"add"})} onEdit={s=>setModal({type:"edit",supplier:s})} onDelete={s=>setModal({type:"delete",supplier:s})} />}
-            {tab==="rfq"         && <RFQGenerator suppliers={suppliers} projects={projects} onGenerated={goToRegister} onProjectsRefresh={loadProjects} />}
-            {tab==="rfqregister" && <RFQRegister key={historyKey} suppliers={suppliers} />}
+            {tab==="rfq"         && <RFQGenerator suppliers={suppliers} projects={projects} onGenerated={goToRegister} onProjectCreated={addLocalProject} />}
+            {tab==="rfqregister" && <RFQRegister key={historyKey} suppliers={suppliers} projects={projects} />}
           </div>
 
           {/* Status bar */}
