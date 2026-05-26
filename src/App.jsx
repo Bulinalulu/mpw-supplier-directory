@@ -497,7 +497,7 @@ function RFQGenerator({ suppliers, projects, onGenerated, onProjectCreated }) {
     if(!validate()) return;
     setStatus("generating"); setGenError("");
     try {
-      const resp = await fetch("/.netlify/functions/generate-rfq", {
+      const resp = await fetch("/api/generate-rfq", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ form, items }),
       });
@@ -670,7 +670,7 @@ function RFQPreviewModal({ record, onClose }) {
       try {
         const form = { project:record.project, brbn:record.brbn, date:record.doc_date, scope:record.scope, closingTime:record.closing_time, closingDate:record.closing_date };
         const items = JSON.parse(record.items||"[]");
-        const resp = await fetch("/.netlify/functions/generate-rfq", {
+        const resp = await fetch("/api/generate-rfq", {
           method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({form,items}),
         });
         if(!resp.ok) throw new Error("Failed to generate preview");
