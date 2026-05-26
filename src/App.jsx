@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, createContext, useContext } from "react";
 
 // ── Supabase ───────────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://boxiezoqibfczozevxzu.supabase.co";
@@ -71,6 +71,10 @@ const SEED_SUPPLIERS = [
   { id:"sup_014", name:"Pacific Energy Fiji", email:"bulk@pacenergy.com.fj", phone:"+679 330 9900", address:"Walu Bay, Suva, Fiji", location:"Suva / Nadi (both)", category:"Fuel / Lubricants", specialties:"bulk fuel, lubricants, tanker delivery", last_verified:"2026-03-30", tcc_reference:"TCC-2025-00344", tcc_issue_date:"2025-03-01", website:"", notes:"Nadi depot available.", contact_name:"", contact_position:"", contact_mobiles:"" },
 ];
 
+// ── Mobile context ────────────────────────────────────────────────────────
+const MobileCtx = createContext(false);
+const useMob = () => useContext(MobileCtx);
+
 // ── Win95 Design System ────────────────────────────────────────────────────
 const W = {
   bg:   '#c0c0c0',
@@ -93,6 +97,12 @@ const globalStyles = css`
   ::-webkit-scrollbar-track { background:#c0c0c0; }
   ::-webkit-scrollbar-thumb { background:#c0c0c0; border-top:2px solid #ffffff; border-left:2px solid #ffffff; border-bottom:2px solid #808080; border-right:2px solid #808080; }
   ::-webkit-scrollbar-button { background:#c0c0c0; border-top:2px solid #ffffff; border-left:2px solid #ffffff; border-bottom:2px solid #808080; border-right:2px solid #808080; display:block; height:16px; width:16px; }
+  @media (max-width:640px) {
+    ::-webkit-scrollbar { width:4px; height:4px; }
+    ::-webkit-scrollbar-button { display:none; }
+    body { background:#c0c0c0; }
+    input, select, textarea, button { font-size:13px !important; }
+  }
 `;
 
 // ── Shared Win95 Components ────────────────────────────────────────────────
@@ -123,15 +133,16 @@ function W95GroupBox({ title, children, style={} }) {
 }
 
 function W95Dialog({ title, onClose, children, width=480 }) {
+  const mobile = useMob();
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div style={{ background:'#c0c0c0', ...W.raised, width:'100%', maxWidth:width, fontFamily:W.font }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:mobile?'flex-start':'center', justifyContent:'center', padding:mobile?0:16, overflowY:'auto' }}>
+      <div style={{ background:'#c0c0c0', ...W.raised, width:'100%', maxWidth:mobile?'100%':width, fontFamily:W.font, ...(mobile&&{minHeight:'100dvh'}) }}>
         {/* Title bar */}
-        <div style={{ background:'linear-gradient(to right,#000080,#1084d0)', padding:'3px 4px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <span style={{ color:'#fff', fontWeight:'bold', fontSize:11 }}>📋 {title}</span>
-          <button onClick={onClose} style={{ ...W.raised, background:'#c0c0c0', border:'none', borderTop:'2px solid #ffffff', borderLeft:'2px solid #ffffff', borderBottom:'2px solid #808080', borderRight:'2px solid #808080', width:18, height:16, fontSize:10, cursor:'pointer', padding:0, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+        <div style={{ background:'linear-gradient(to right,#000080,#1084d0)', padding:mobile?'6px 8px':'3px 4px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <span style={{ color:'#fff', fontWeight:'bold', fontSize:mobile?13:11 }}>📋 {title}</span>
+          <button onClick={onClose} style={{ ...W.raised, background:'#c0c0c0', border:'none', borderTop:'2px solid #ffffff', borderLeft:'2px solid #ffffff', borderBottom:'2px solid #808080', borderRight:'2px solid #808080', width:mobile?28:18, height:mobile?24:16, fontSize:mobile?13:10, cursor:'pointer', padding:0, lineHeight:1, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
         </div>
-        <div style={{ padding:12 }}>{children}</div>
+        <div style={{ padding:mobile?16:12 }}>{children}</div>
       </div>
     </div>
   );
@@ -156,6 +167,7 @@ function fmtLong(d){ if(!d) return ""; try { return new Date(d+"T00:00:00").toLo
 
 // ── Project Register ───────────────────────────────────────────────────────
 function ProjectForm({ initial, onSave, onCancel }) {
+  const mobile = useMob();
   const [form, setForm] = useState(initial || { name:"", description:"", location:"", status:"Active" });
   const [err, setErr] = useState("");
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -247,7 +259,7 @@ function ProjectRegister({ projects, rfqRecords, loading, onRefresh, onProjectCr
       </div>
 
       {/* Project list */}
-      <div style={{ ...W.sunken, background:"#fff", minHeight:200, maxHeight:420, overflowY:"auto" }}>
+      <div style={{ ...W.sunken, background:"#fff", minHeight:200, maxHeight:420, overflowY:"auto", overflowX:"auto" }}>
         {/* Header */}
         <div style={{ display:"grid", gridTemplateColumns:"2fr 1.5fr 80px 60px 80px 80px", background:"#c0c0c0", borderBottom:"2px solid #808080", position:"sticky", top:0 }}>
           {["Project Name","Location","Status","RFQs","Latest","Created"].map(h=>(
@@ -326,13 +338,14 @@ function ProjectRegister({ projects, rfqRecords, loading, onRefresh, onProjectCr
 const EMPTY_SUPP = { name:"", email:"", phone:"", address:"", location:"", category:CATEGORIES[0], specialties:"", last_verified:"", tcc_reference:"", tcc_issue_date:"", notes:"", website:"", contact_name:"", contact_position:"", contact_mobiles:"" };
 
 function SupplierForm({ initial, onSave, onCancel }) {
+  const mobile = useMob();
   const [form, setForm] = useState(initial || EMPTY_SUPP);
   const [err, setErr] = useState("");
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const save = () => { if(!form.name.trim()){setErr("Name is required.");return;} onSave(form); };
   return (
     <div style={{ maxHeight:"70vh", overflowY:"auto", paddingRight:4 }}>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 12px" }}>
+      <div style={{ display:"grid", gridTemplateColumns:mobile?"1fr":"1fr 1fr", gap:"0 12px" }}>
         <div style={{ gridColumn:"1/-1" }}><W95Field label="Supplier Name *"><input style={inp({borderColor:err?"#800000":undefined})} value={form.name} onChange={e=>set("name",e.target.value)} /></W95Field></div>
         <W95Field label="Category"><select style={sel()} value={form.category} onChange={e=>set("category",e.target.value)}>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></W95Field>
         <W95Field label="Email"><input style={inp()} type="email" value={form.email||""} onChange={e=>set("email",e.target.value)} /></W95Field>
@@ -396,7 +409,7 @@ function SupplierDirectory({ suppliers, loading, onRefresh, onAdd, onEdit, onDel
         <div style={{ ...W.sunken, background:"#fff", padding:"3px 10px" }}>Shown: <strong>{filtered.length}</strong></div>
       </div>
       {/* List */}
-      <div style={{ ...W.sunken, background:"#fff", minHeight:200, maxHeight:460, overflowY:"auto" }}>
+      <div style={{ ...W.sunken, background:"#fff", minHeight:200, maxHeight:460, overflowY:"auto", overflowX:"auto" }}>
         <div style={{ display:"grid", gridTemplateColumns:"20px 2fr 1.5fr 1.2fr 1fr 80px", background:"#c0c0c0", borderBottom:"2px solid #808080", position:"sticky", top:0 }}>
           {["","Name","Category","Contact","Location","Verified"].map(h=>(
             <div key={h} style={{ ...W.raised, padding:"3px 5px", fontWeight:"bold", fontSize:11 }}>{h}</div>
@@ -451,6 +464,7 @@ function triggerDownload(filename, contentB64) {
 }
 
 function RFQGenerator({ suppliers, projects, onGenerated, onProjectCreated }) {
+  const mobile = useMob();
   const today = new Date().toISOString().slice(0,10);
   const [form, setForm]           = useState({ project:"", brbn:"", date:today, scope:"", closingTime:"12:00 PM", closingDate:"" });
   const [items, setItems]         = useState([{id:1,description:"",qty:"1",unit:"Each"}]);
@@ -544,7 +558,7 @@ function RFQGenerator({ suppliers, projects, onGenerated, onProjectCreated }) {
 
       {/* Section 1 — Project Details */}
       <W95GroupBox title="1. Project Details">
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 12px" }}>
+        <div style={{ display:"grid", gridTemplateColumns:mobile?"1fr":"1fr 1fr", gap:"0 12px" }}>
           {/* Project picker */}
           <div style={{ gridColumn:"1/-1" }}>
             <W95Field label={<span>Project Name {errors.project&&<span style={{color:"#800000"}}> — {errors.project}</span>}</span>}>
@@ -712,6 +726,7 @@ function RFQPreviewModal({ record, onClose }) {
 
 // ── RFQ Edit Modal ─────────────────────────────────────────────────────────
 function RFQEditModal({ record, projects, onSave, onClose }) {
+  const mobile = useMob();
   const [form, setForm] = useState({
     project: record.project || "",
     brbn: record.brbn || "",
@@ -762,7 +777,7 @@ function RFQEditModal({ record, projects, onSave, onClose }) {
     <W95Dialog title={`Edit RFQ — ${record.brbn}`} onClose={onClose} width={600}>
       <div style={{ maxHeight:"70vh", overflowY:"auto", paddingRight:4 }}>
         <W95GroupBox title="Project Details">
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 12px" }}>
+          <div style={{ display:"grid", gridTemplateColumns:mobile?"1fr":"1fr 1fr", gap:"0 12px" }}>
             <div style={{ gridColumn:"1/-1" }}>
               <W95Field label={<span>Project {errors.project&&<span style={{color:"#800000"}}> — {errors.project}</span>}</span>}>
                 <div style={{ display:"flex", gap:4 }}>
@@ -910,7 +925,7 @@ function RFQRegister({ suppliers, projects }) {
       </div>
 
       {/* Table */}
-      <div style={{ ...W.sunken, background:"#fff", minHeight:200, maxHeight:500, overflowY:"auto" }}>
+      <div style={{ ...W.sunken, background:"#fff", minHeight:200, maxHeight:500, overflowY:"auto", overflowX:"auto" }}>
         <div style={{ display:"grid", gridTemplateColumns:"130px 2fr 90px 90px 80px 280px", background:"#c0c0c0", borderBottom:"2px solid #808080", position:"sticky", top:0 }}>
           {["BRBN","Project","Closing","Created","Status","Actions"].map(h=>(
             <div key={h} style={{ ...W.raised, padding:"3px 6px", fontWeight:"bold", fontSize:11 }}>{h}</div>
@@ -1015,7 +1030,14 @@ export default function App() {
   const [modal,     setModal]     = useState(null);
   const [saving,    setSaving]    = useState(false);
   const [historyKey,setHistoryKey]= useState(0);
+  const [mobile,    setMobile]    = useState(() => window.innerWidth < 640);
   const seeded = useRef(false);
+
+  useEffect(() => {
+    const h = () => setMobile(window.innerWidth < 640);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
 
   const loadSuppliers = async () => {
     const data = await db.suppliers.list();
@@ -1038,62 +1060,65 @@ export default function App() {
   const goToRegister = () => { setHistoryKey(k=>k+1); setTab("rfqregister"); loadRFQs(); };
 
   const TABS = [
-    { id:"projects",    label:"🏗 Project Register" },
-    { id:"suppliers",   label:"📦 Suppliers"        },
-    { id:"rfq",         label:"📄 RFQ Generator"    },
-    { id:"rfqregister", label:"📁 RFQ Register"     },
+    { id:"projects",    label:"🏗 Project Register", short:"🏗 Projects"  },
+    { id:"suppliers",   label:"📦 Suppliers",        short:"📦 Suppliers" },
+    { id:"rfq",         label:"📄 RFQ Generator",    short:"📄 RFQ"       },
+    { id:"rfqregister", label:"📁 RFQ Register",     short:"📁 Register"  },
   ];
 
   const rfqReady = suppliers.filter(s=>s.email&&s.email.trim()).length;
 
   return (
+    <MobileCtx.Provider value={mobile}>
     <>
       <style>{globalStyles}</style>
-      <div style={{ minHeight:"100vh", background:"#008080", display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"16px" }}>
+      <div style={{ minHeight:"100vh", background:"#008080", display:"flex", alignItems:"flex-start", justifyContent:"center", padding:mobile?0:"16px" }}>
         {/* Main window */}
-        <div style={{ background:"#c0c0c0", ...W.raised, width:"100%", maxWidth:980, fontFamily:W.font }}>
+        <div style={{ background:"#c0c0c0", ...(mobile?{}:W.raised), width:"100%", maxWidth:mobile?"100%":980, fontFamily:W.font }}>
           {/* Title bar */}
-          <div style={{ background:"linear-gradient(to right,#000080,#1084d0)", padding:"3px 4px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ background:"linear-gradient(to right,#000080,#1084d0)", padding:mobile?"6px 8px":"3px 4px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-              <span style={{ fontSize:14 }}>🖥</span>
-              <span style={{ color:"#fff", fontWeight:"bold", fontSize:11 }}>Test App</span>
+              <span style={{ fontSize:mobile?18:14 }}>🖥</span>
+              <span style={{ color:"#fff", fontWeight:"bold", fontSize:mobile?14:11 }}>Test App</span>
             </div>
-            <div style={{ display:"flex", gap:2 }}>
+            {!mobile && <div style={{ display:"flex", gap:2 }}>
               {["_","□","×"].map((c,i)=>(
                 <button key={i} style={{ ...W.raised, background:"#c0c0c0", border:"none", borderTop:"2px solid #ffffff", borderLeft:"2px solid #ffffff", borderBottom:"2px solid #808080", borderRight:"2px solid #808080", width:18, height:16, fontSize:9, cursor:"pointer", padding:0, lineHeight:1 }}>{c}</button>
               ))}
-            </div>
+            </div>}
           </div>
 
-          {/* Menu bar */}
-          <div style={{ background:"#c0c0c0", borderBottom:"1px solid #808080", padding:"2px 4px", display:"flex", gap:0 }}>
+          {/* Menu bar — desktop only */}
+          {!mobile && <div style={{ background:"#c0c0c0", borderBottom:"1px solid #808080", padding:"2px 4px", display:"flex", gap:0 }}>
             {["File","Edit","View","Help"].map(m=>(
               <button key={m} style={{ background:"none", border:"none", padding:"2px 8px", cursor:"pointer", fontFamily:W.font, fontSize:11 }}>{m}</button>
             ))}
-          </div>
+          </div>}
 
           {/* Tab bar */}
-          <div style={{ background:"#c0c0c0", padding:"4px 4px 0", display:"flex", gap:2, borderBottom:"2px solid #808080" }}>
+          <div style={{ background:"#c0c0c0", padding:mobile?"4px 4px 0":"4px 4px 0", display:"flex", gap:2, borderBottom:"2px solid #808080", flexWrap:mobile?"wrap":"nowrap" }}>
             {TABS.map(t=>{
               const active = tab===t.id;
               return (
                 <button key={t.id} onClick={()=>setTab(t.id)} style={{
-                  padding:"3px 12px", cursor:"pointer", fontFamily:W.font, fontSize:11,
+                  padding:mobile?"8px 6px":"3px 12px",
+                  flex:mobile?"1 1 calc(50% - 4px)":"0 0 auto",
+                  cursor:"pointer", fontFamily:W.font, fontSize:mobile?12:11,
                   fontWeight:active?"bold":"normal",
-                  background:"#c0c0c0",
+                  background:"#c0c0c0", textAlign:"center",
                   borderTop:"2px solid #ffffff", borderLeft:"2px solid #ffffff",
                   borderRight:"2px solid #808080",
                   borderBottom:active?"2px solid #c0c0c0":"2px solid #808080",
                   marginBottom:active?-2:0, position:"relative", zIndex:active?1:0,
                 }}>
-                  {t.label}
+                  {mobile ? t.short : t.label}
                 </button>
               );
             })}
           </div>
 
           {/* Client area */}
-          <div style={{ background:"#c0c0c0", minHeight:400, maxHeight:"calc(100vh - 120px)", overflowY:"auto" }}>
+          <div style={{ background:"#c0c0c0", minHeight:mobile?0:400, maxHeight:mobile?"calc(100dvh - 100px)":"calc(100vh - 120px)", overflowY:"auto" }}>
             {tab==="projects"    && <ProjectRegister projects={projects} rfqRecords={rfqRecords} loading={loading} onRefresh={async()=>{await loadProjects();await loadRFQs();}} onProjectCreated={addLocalProject} />}
             {tab==="suppliers"   && <SupplierDirectory suppliers={suppliers} loading={loading} onRefresh={loadSuppliers} onAdd={()=>setModal({type:"add"})} onEdit={s=>setModal({type:"edit",supplier:s})} onDelete={s=>setModal({type:"delete",supplier:s})} />}
             {tab==="rfq"         && <RFQGenerator suppliers={suppliers} projects={projects} onGenerated={goToRegister} onProjectCreated={addLocalProject} />}
@@ -1128,5 +1153,6 @@ export default function App() {
         </W95Dialog>
       )}
     </>
+    </MobileCtx.Provider>
   );
 }
