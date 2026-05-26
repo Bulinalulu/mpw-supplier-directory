@@ -179,7 +179,7 @@ function ProjectForm({ initial, onSave, onCancel }) {
   );
 }
 
-function ProjectRegister({ projects, rfqRecords, loading, onRefresh }) {
+function ProjectRegister({ projects, rfqRecords, loading, onRefresh, onProjectCreated }) {
   const [modal, setModal]   = useState(null);
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -196,9 +196,15 @@ function ProjectRegister({ projects, rfqRecords, loading, onRefresh }) {
   const handleSave = async (form) => {
     setSaving(true);
     try {
-      if(modal.type==="edit") await db.projects.update(modal.project.id, { ...form, updated_at: new Date().toISOString() });
-      else await db.projects.insert({ ...form, id:"proj_"+Date.now(), created_at:new Date().toISOString(), updated_at:new Date().toISOString() });
-      await onRefresh(); setModal(null);
+      if(modal.type==="edit") {
+        await db.projects.update(modal.project.id, { ...form, updated_at: new Date().toISOString() });
+        await onRefresh();
+      } else {
+        const proj = { ...form, id:"proj_"+Date.now(), created_at:new Date().toISOString(), updated_at:new Date().toISOString() };
+        await db.projects.insert(proj);
+        onProjectCreated(proj);
+      }
+      setModal(null);
     } catch{}
     setSaving(false);
   };
@@ -1088,7 +1094,7 @@ export default function App() {
 
           {/* Client area */}
           <div style={{ background:"#c0c0c0", minHeight:400, maxHeight:"calc(100vh - 120px)", overflowY:"auto" }}>
-            {tab==="projects"    && <ProjectRegister projects={projects} rfqRecords={rfqRecords} loading={loading} onRefresh={async()=>{await loadProjects();await loadRFQs();}} />}
+            {tab==="projects"    && <ProjectRegister projects={projects} rfqRecords={rfqRecords} loading={loading} onRefresh={async()=>{await loadProjects();await loadRFQs();}} onProjectCreated={addLocalProject} />}
             {tab==="suppliers"   && <SupplierDirectory suppliers={suppliers} loading={loading} onRefresh={loadSuppliers} onAdd={()=>setModal({type:"add"})} onEdit={s=>setModal({type:"edit",supplier:s})} onDelete={s=>setModal({type:"delete",supplier:s})} />}
             {tab==="rfq"         && <RFQGenerator suppliers={suppliers} projects={projects} onGenerated={goToRegister} onProjectCreated={addLocalProject} />}
             {tab==="rfqregister" && <RFQRegister key={historyKey} suppliers={suppliers} projects={projects} />}
