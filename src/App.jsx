@@ -327,29 +327,31 @@ function SupplierForm({ initial, onSave, onCancel }) {
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const save = () => { if(!form.name.trim()){setErr("Name is required.");return;} onSave(form); };
   return (
-    <div style={{ maxHeight:"70vh", overflowY:"auto", paddingRight:4 }}>
-      <div style={{ display:"grid", gridTemplateColumns:mobile?"1fr":"1fr 1fr", gap:"0 12px" }}>
-        <div style={{ gridColumn:"1/-1" }}><W95Field label="Supplier Name *"><input style={inp({borderColor:err?"#800000":undefined})} value={form.name} onChange={e=>set("name",e.target.value)} /></W95Field></div>
-        <W95Field label="Category"><select style={sel()} value={form.category} onChange={e=>set("category",e.target.value)}>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></W95Field>
-        <W95Field label="Email"><input style={inp()} type="email" value={form.email||""} onChange={e=>set("email",e.target.value)} /></W95Field>
-        <W95Field label="Phone"><input style={inp()} value={form.phone||""} onChange={e=>set("phone",e.target.value)} /></W95Field>
-        <W95Field label="Location"><input style={inp()} value={form.location||""} onChange={e=>set("location",e.target.value)} /></W95Field>
-        <div style={{ gridColumn:"1/-1" }}><W95Field label="Address"><input style={inp()} value={form.address||""} onChange={e=>set("address",e.target.value)} /></W95Field></div>
-        <div style={{ gridColumn:"1/-1" }}><W95Field label="Website"><input style={inp()} type="url" value={form.website||""} onChange={e=>set("website",e.target.value)} /></W95Field></div>
-        <div style={{ gridColumn:"1/-1" }}><W95Field label="Specialties"><input style={inp()} value={form.specialties||""} onChange={e=>set("specialties",e.target.value)} placeholder="Comma-separated" /></W95Field></div>
-        <div style={{ gridColumn:"1/-1", borderTop:"1px solid #808080", marginTop:4, paddingTop:8 }}>
-          <div style={{ fontWeight:"bold", marginBottom:6 }}>Contact Person</div>
+    <div style={{ display:"flex", flexDirection:"column" }}>
+      <div style={{ maxHeight:mobile?"calc(100dvh - 160px)":"62vh", overflowY:"auto", paddingRight:4 }}>
+        <div style={{ display:"grid", gridTemplateColumns:mobile?"1fr":"1fr 1fr", gap:"0 12px" }}>
+          <div style={{ gridColumn:"1/-1" }}><W95Field label="Supplier Name *"><input style={inp({borderColor:err?"#800000":undefined})} value={form.name} onChange={e=>set("name",e.target.value)} /></W95Field></div>
+          <W95Field label="Category"><select style={sel()} value={form.category} onChange={e=>set("category",e.target.value)}>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></W95Field>
+          <W95Field label="Email"><input style={inp()} type="email" value={form.email||""} onChange={e=>set("email",e.target.value)} /></W95Field>
+          <W95Field label="Phone"><input style={inp()} value={form.phone||""} onChange={e=>set("phone",e.target.value)} /></W95Field>
+          <W95Field label="Location"><input style={inp()} value={form.location||""} onChange={e=>set("location",e.target.value)} /></W95Field>
+          <div style={{ gridColumn:"1/-1" }}><W95Field label="Address"><input style={inp()} value={form.address||""} onChange={e=>set("address",e.target.value)} /></W95Field></div>
+          <div style={{ gridColumn:"1/-1" }}><W95Field label="Website"><input style={inp()} type="url" value={form.website||""} onChange={e=>set("website",e.target.value)} /></W95Field></div>
+          <div style={{ gridColumn:"1/-1" }}><W95Field label="Specialties"><input style={inp()} value={form.specialties||""} onChange={e=>set("specialties",e.target.value)} placeholder="Comma-separated" /></W95Field></div>
+          <div style={{ gridColumn:"1/-1", borderTop:"1px solid #808080", marginTop:4, paddingTop:8 }}>
+            <div style={{ fontWeight:"bold", marginBottom:6 }}>Contact Person</div>
+          </div>
+          <W95Field label="Contact Name"><input style={inp()} value={form.contact_name||""} onChange={e=>set("contact_name",e.target.value)} /></W95Field>
+          <W95Field label="Position"><input style={inp()} value={form.contact_position||""} onChange={e=>set("contact_position",e.target.value)} /></W95Field>
+          <div style={{ gridColumn:"1/-1" }}><W95Field label="Mobile(s)"><input style={inp()} value={form.contact_mobiles||""} onChange={e=>set("contact_mobiles",e.target.value)} placeholder="e.g. 9917971, 7717971" /></W95Field></div>
+          <div style={{ gridColumn:"1/-1", borderTop:"1px solid #808080", marginTop:4, paddingTop:8 }}>
+            <div style={{ fontWeight:"bold", marginBottom:6 }}>Tax Compliance Certificate</div>
+          </div>
+          <W95Field label="TCC Reference"><input style={inp()} value={form.tcc_reference||""} onChange={e=>set("tcc_reference",e.target.value)} /></W95Field>
+          <W95Field label="TCC Issue Date"><input style={inp()} type="date" value={form.tcc_issue_date||""} onChange={e=>set("tcc_issue_date",e.target.value||null)} /></W95Field>
+          <W95Field label="Last Verified"><input style={inp()} type="date" value={form.last_verified||""} onChange={e=>set("last_verified",e.target.value||null)} /></W95Field>
+          <div style={{ gridColumn:"1/-1" }}><W95Field label="Notes"><textarea style={inp({minHeight:56,resize:"vertical"})} value={form.notes||""} onChange={e=>set("notes",e.target.value)} /></W95Field></div>
         </div>
-        <W95Field label="Contact Name"><input style={inp()} value={form.contact_name||""} onChange={e=>set("contact_name",e.target.value)} /></W95Field>
-        <W95Field label="Position"><input style={inp()} value={form.contact_position||""} onChange={e=>set("contact_position",e.target.value)} /></W95Field>
-        <div style={{ gridColumn:"1/-1" }}><W95Field label="Mobile(s)" ><input style={inp()} value={form.contact_mobiles||""} onChange={e=>set("contact_mobiles",e.target.value)} placeholder="e.g. 9917971, 7717971" /></W95Field></div>
-        <div style={{ gridColumn:"1/-1", borderTop:"1px solid #808080", marginTop:4, paddingTop:8 }}>
-          <div style={{ fontWeight:"bold", marginBottom:6 }}>Tax Compliance Certificate</div>
-        </div>
-        <W95Field label="TCC Reference"><input style={inp()} value={form.tcc_reference||""} onChange={e=>set("tcc_reference",e.target.value)} /></W95Field>
-        <W95Field label="TCC Issue Date"><input style={inp()} type="date" value={form.tcc_issue_date||""} onChange={e=>set("tcc_issue_date",e.target.value||null)} /></W95Field>
-        <W95Field label="Last Verified"><input style={inp()} type="date" value={form.last_verified||""} onChange={e=>set("last_verified",e.target.value||null)} /></W95Field>
-        <div style={{ gridColumn:"1/-1" }}><W95Field label="Notes"><textarea style={inp({minHeight:56,resize:"vertical"})} value={form.notes||""} onChange={e=>set("notes",e.target.value)} /></W95Field></div>
       </div>
       {err && <p style={{ color:"#800000", margin:"4px 0" }}>{err}</p>}
       <div style={{ display:"flex", justifyContent:"flex-end", gap:6, marginTop:12, paddingTop:8, borderTop:"1px solid #808080" }}>
