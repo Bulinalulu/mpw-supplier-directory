@@ -11,7 +11,6 @@ const db = {
   suppliers: {
     list:   ()       => fetch(`${SUPABASE_URL}/rest/v1/suppliers?order=name.asc`, { headers: HDR }).then(r => r.json()),
     insert: (row)    => fetch(`${SUPABASE_URL}/rest/v1/suppliers`, { method:"POST", headers: HDR, body: JSON.stringify(row) }).then(r => r.json()),
-    upsert: (rows)   => fetch(`${SUPABASE_URL}/rest/v1/suppliers`, { method:"POST", headers:{ ...HDR,"Prefer":"resolution=ignore-duplicates,return=representation" }, body: JSON.stringify(rows) }).then(r => r.json()),
     update: (id,row) => fetch(`${SUPABASE_URL}/rest/v1/suppliers?id=eq.${id}`, { method:"PATCH", headers: HDR, body: JSON.stringify(row) }).then(r => r.json()),
     delete: (id)     => fetch(`${SUPABASE_URL}/rest/v1/suppliers?id=eq.${id}`, { method:"DELETE", headers: HDR }).then(r => r.ok),
   },
@@ -54,22 +53,6 @@ const STATUS_META = {
 };
 const PROJ_STATUS_COLOR = { Active:"#008000", "On Hold":"#808000", Completed:"#000080" };
 
-const SEED_SUPPLIERS = [
-  { id:"sup_001", name:"Deo Hire", email:"saleshni.lingam@deoconstruction.com", phone:"+679 9992454", address:"Lot 11 Industrial Area, Denarau Island, Nadi, Fiji", location:"Nadi (Western Division)", category:"Plant Hire", specialties:"plant hire, construction equipment rental", last_verified:"2026-05-13", tcc_reference:"TCC-2025-00441", tcc_issue_date:"2025-03-01", website:"https://www.deoconstruction.com", notes:"Email from company website.", contact_name:"", contact_position:"", contact_mobiles:"" },
-  { id:"sup_002", name:"National Hire Pte Ltd", email:"nationalhirefiji@gmail.com", phone:"+679 992 3200", address:"90 Brown Street, Toorak, Suva, Fiji", location:"Suva / Nadi", category:"Plant Hire", specialties:"plant hire, earthmoving, heavy machinery", last_verified:"2026-05-13", tcc_reference:"TCC-2025-00118", tcc_issue_date:"2025-01-15", website:"", notes:"Founded 2002.", contact_name:"", contact_position:"", contact_mobiles:"" },
-  { id:"sup_003", name:"Central Project Hire Plant Services", email:"", phone:"+679 341 0749", address:"Lot 19 Bau Street, Nakasi, Fiji", location:"Nakasi (Central Division)", category:"Plant Hire", specialties:"earthmoving, excavating, plant hire", last_verified:"2026-05-13", tcc_reference:"", tcc_issue_date:null, website:"", notes:"No email — direct outreach needed.", contact_name:"", contact_position:"", contact_mobiles:"" },
-  { id:"sup_004", name:"Fiji Hardware Ltd", email:"sales@fijihardware.com.fj", phone:"+679 665 0333", address:"Kings Road, Nadi, Fiji", location:"Nadi (Western Division)", category:"Building Materials", specialties:"cement, steel, roofing, timber, hardware", last_verified:"2026-05-20", tcc_reference:"TCC-2025-00872", tcc_issue_date:"2025-06-01", website:"", notes:"Main hardware distributor for Western Division.", contact_name:"", contact_position:"", contact_mobiles:"" },
-  { id:"sup_005", name:"R.B. Patel Hardware", email:"rbphardware@connect.com.fj", phone:"+679 672 0011", address:"Martintar, Nadi, Fiji", location:"Nadi (Western Division)", category:"Building Materials", specialties:"building materials, plumbing, electrical fittings", last_verified:"2026-04-10", tcc_reference:"TCC-2024-01204", tcc_issue_date:"2024-09-15", website:"", notes:"Reliable local supplier.", contact_name:"", contact_position:"", contact_mobiles:"" },
-  { id:"sup_006", name:"Pacific Building Supplies", email:"procurement@pacificbuild.com.fj", phone:"+679 330 5500", address:"Raiwaqa, Suva, Fiji", location:"Suva (Central Division)", category:"Building Materials", specialties:"roofing, structural steel, concrete blocks", last_verified:"2026-03-22", tcc_reference:"", tcc_issue_date:null, website:"", notes:"TCC not yet confirmed.", contact_name:"", contact_position:"", contact_mobiles:"" },
-  { id:"sup_007", name:"Safety First Fiji", email:"orders@safetyfirstfiji.com", phone:"+679 331 4422", address:"Walu Bay Industrial Area, Suva, Fiji", location:"Suva (Central Division)", category:"PPE / Safety", specialties:"hard hats, hi-vis vests, safety boots, gloves", last_verified:"2026-05-01", tcc_reference:"TCC-2025-00563", tcc_issue_date:"2025-04-20", website:"https://www.safetyfirstfiji.com", notes:"Preferred PPE supplier.", contact_name:"", contact_position:"", contact_mobiles:"" },
-  { id:"sup_008", name:"WorkSafe Supplies Fiji", email:"info@worksafe.com.fj", phone:"+679 670 8810", address:"Namaka Industrial Estate, Nadi, Fiji", location:"Nadi (Western Division)", category:"PPE / Safety", specialties:"PPE, workwear, safety signage, spill kits", last_verified:"2026-04-28", tcc_reference:"TCC-2025-00299", tcc_issue_date:"2025-02-10", website:"", notes:"Western Division based.", contact_name:"", contact_position:"", contact_mobiles:"" },
-  { id:"sup_009", name:"Westpac Civil Contractors", email:"tenders@westpaccivil.com.fj", phone:"+679 666 1234", address:"Vunimono, Nadi, Fiji", location:"Nadi (Western Division)", category:"Civil Works", specialties:"road construction, drainage, earthworks", last_verified:"2026-05-15", tcc_reference:"TCC-2025-00711", tcc_issue_date:"2025-05-01", website:"", notes:"Experienced with road projects in Western Division.", contact_name:"", contact_position:"", contact_mobiles:"" },
-  { id:"sup_010", name:"Pacific Roads Ltd", email:"admin@pacificroads.com.fj", phone:"+679 330 7700", address:"Lami, Suva, Fiji", location:"Suva / Western (mobile)", category:"Civil Works", specialties:"bitumen sealing, road marking, pothole repair", last_verified:"2026-02-14", tcc_reference:"TCC-2024-00950", tcc_issue_date:"2024-07-30", website:"", notes:"Can mobilise to Western Division.", contact_name:"", contact_position:"", contact_mobiles:"" },
-  { id:"sup_011", name:"Fiji Logistics & Transport", email:"dispatch@fijilt.com.fj", phone:"+679 628 3300", address:"Lautoka Port Area, Lautoka, Fiji", location:"Lautoka (Western Division)", category:"Transport / Logistics", specialties:"freight, heavy haulage, crane hire", last_verified:"2026-05-10", tcc_reference:"TCC-2025-00412", tcc_issue_date:"2025-03-18", website:"", notes:"Handles oversized loads.", contact_name:"", contact_position:"", contact_mobiles:"" },
-  { id:"sup_012", name:"Motibhai Stationery", email:"stationery@motibhai.com.fj", phone:"+679 666 0033", address:"Namaka, Nadi, Fiji", location:"Nadi (Western Division)", category:"Office Supplies", specialties:"stationery, printing, office consumables", last_verified:"2026-04-05", tcc_reference:"TCC-2024-01100", tcc_issue_date:"2024-11-01", website:"https://www.motibhai.com", notes:"30-day payment terms available.", contact_name:"", contact_position:"", contact_mobiles:"" },
-  { id:"sup_013", name:"Mobil Fiji Ltd", email:"commercial@mobil.com.fj", phone:"+679 672 2200", address:"Wailoaloa Road, Nadi, Fiji", location:"Nadi (Western Division)", category:"Fuel / Lubricants", specialties:"diesel, petrol, lubricants, bulk fuel", last_verified:"2026-05-18", tcc_reference:"TCC-2025-00088", tcc_issue_date:"2025-01-05", website:"", notes:"Bulk diesel for plant and generators.", contact_name:"", contact_position:"", contact_mobiles:"" },
-  { id:"sup_014", name:"Pacific Energy Fiji", email:"bulk@pacenergy.com.fj", phone:"+679 330 9900", address:"Walu Bay, Suva, Fiji", location:"Suva / Nadi (both)", category:"Fuel / Lubricants", specialties:"bulk fuel, lubricants, tanker delivery", last_verified:"2026-03-30", tcc_reference:"TCC-2025-00344", tcc_issue_date:"2025-03-01", website:"", notes:"Nadi depot available.", contact_name:"", contact_position:"", contact_mobiles:"" },
-];
 
 // ── Mobile context ────────────────────────────────────────────────────────
 const MobileCtx = createContext(false);
@@ -1031,7 +1014,6 @@ export default function App() {
   const [saving,    setSaving]    = useState(false);
   const [historyKey,setHistoryKey]= useState(0);
   const [mobile,    setMobile]    = useState(() => window.innerWidth < 640);
-  const seeded = useRef(false);
 
   useEffect(() => {
     const h = () => setMobile(window.innerWidth < 640);
@@ -1042,9 +1024,7 @@ export default function App() {
   const loadSuppliers = async () => {
     const data = await db.suppliers.list();
     if(!Array.isArray(data)) return;
-    if(!seeded.current){ seeded.current=true; await db.suppliers.upsert(SEED_SUPPLIERS); }
-    const fresh = await db.suppliers.list();
-    setSuppliers(Array.isArray(fresh)?fresh:data);
+    setSuppliers(data);
     setLoading(false);
   };
   const loadProjects = async () => { const d=await db.projects.list(); if(Array.isArray(d)) setProjects(d); };
