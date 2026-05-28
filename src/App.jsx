@@ -956,6 +956,19 @@ function RFQRegister({ suppliers, projects }) {
 
 function RFQRow({ record, meta, supplierNames, onPreview, onEdit, onDelete, onAdvance, onRevert, advanceLabel, revertLabel, updating }) {
   const [expanded, setExpanded] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const form = { project:record.project, brbn:record.brbn, date:record.doc_date, scope:record.scope, closingTime:record.closing_time, closingDate:record.closing_date };
+      const items = (() => { try { return JSON.parse(record.items||"[]"); } catch { return []; } })();
+      const resp = await fetch("/api/generate-rfq", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({form,items}) });
+      if (!resp.ok) throw new Error("Failed");
+      const { filename, contentB64 } = await resp.json();
+      triggerDownload(filename, contentB64);
+    } catch {}
+    setDownloading(false);
+  };
   let items=[],statusHistory=[];
   try{items=JSON.parse(record.items||"[]");}catch{}
   try{
@@ -972,9 +985,10 @@ function RFQRow({ record, meta, supplierNames, onPreview, onEdit, onDelete, onAd
         <div style={{ padding:"3px 6px", fontSize:10 }}>{fmtTs(record.created_at)}</div>
         <div style={{ padding:"3px 6px", color:meta.color, fontWeight:"bold" }}>{record.status}</div>
         <div style={{ padding:"2px 4px", display:"flex", gap:3, alignItems:"center", flexWrap:"wrap" }} onClick={e=>e.stopPropagation()}>
-          <W95Btn onClick={onPreview} style={{ padding:"2px 6px", fontSize:10 }}>👁 View</W95Btn>
-          <W95Btn onClick={onEdit}    style={{ padding:"2px 6px", fontSize:10 }}>✏ Edit</W95Btn>
-          <W95Btn onClick={onDelete}  style={{ padding:"2px 6px", fontSize:10 }}>🗑 Del</W95Btn>
+          <W95Btn onClick={onPreview}      style={{ padding:"2px 6px", fontSize:10 }}>👁 View</W95Btn>
+          <W95Btn onClick={handleDownload} style={{ padding:"2px 6px", fontSize:10 }} disabled={downloading}>{downloading?<Spinner/>:"⬇ DL"}</W95Btn>
+          <W95Btn onClick={onEdit}         style={{ padding:"2px 6px", fontSize:10 }}>✏ Edit</W95Btn>
+          <W95Btn onClick={onDelete}       style={{ padding:"2px 6px", fontSize:10 }}>🗑 Del</W95Btn>
           {onRevert  && <W95Btn onClick={onRevert}  style={{ padding:"2px 6px", fontSize:10 }} disabled={updating}>{updating?<Spinner/>:revertLabel}</W95Btn>}
           {onAdvance && <W95Btn onClick={onAdvance} style={{ padding:"2px 6px", fontSize:10 }} disabled={updating}>{updating?<Spinner/>:advanceLabel}</W95Btn>}
         </div>
