@@ -27,7 +27,10 @@ const db = {
     delete: (id)      => fetch(`${SUPABASE_URL}/rest/v1/rfq_records?id=eq.${id}`, { method:"DELETE", headers: HDR }).then(r => r.ok),
     updateStatus: (record, newStatus) => {
       const entry = { from: record.status, to: newStatus, at: new Date().toISOString() };
-      const history = [...(record.status_history||[]), entry];
+      let existing = record.status_history || [];
+      if (typeof existing === 'string') { try { existing = JSON.parse(existing); } catch { existing = []; } }
+      if (!Array.isArray(existing)) existing = [];
+      const history = [...existing.filter(h => h && typeof h === 'object'), entry];
       return fetch(`${SUPABASE_URL}/rest/v1/rfq_records?id=eq.${record.id}`, {
         method:"PATCH", headers: HDR,
         body: JSON.stringify({ status: newStatus, status_history: history, updated_at: new Date().toISOString() })
@@ -514,7 +517,7 @@ function RFQGenerator({ suppliers, projects, onGenerated, onProjectCreated }) {
         supplier_names:JSON.stringify(chosen.map(s=>s.name)),
         recipients_notes:recipientsNotes.trim()||null,
         status:"Draft", created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
-        status_history:JSON.stringify([]),
+        status_history:[],
       });
       setStatus("done"); if(onGenerated) onGenerated();
     } catch(err){ setGenError(err.message); setStatus("error"); }
@@ -955,7 +958,11 @@ function RFQRow({ record, meta, supplierNames, onPreview, onEdit, onDelete, onAd
   const [expanded, setExpanded] = useState(false);
   let items=[],statusHistory=[];
   try{items=JSON.parse(record.items||"[]");}catch{}
-  try{statusHistory=record.status_history||[];}catch{}
+  try{
+    let sh = record.status_history || [];
+    if (typeof sh === 'string') { try { sh = JSON.parse(sh); } catch { sh = []; } }
+    statusHistory = Array.isArray(sh) ? sh.filter(h => h && typeof h === 'object') : [];
+  }catch{}
   return (
     <>
       <div style={{ display:"grid", gridTemplateColumns:"130px 2fr 90px 90px 80px 280px", borderBottom:"1px solid #e0e0e0", cursor:"pointer" }} onClick={()=>setExpanded(o=>!o)}>
