@@ -1035,8 +1035,9 @@ export default function App() {
 
   useEffect(()=>{ loadSuppliers(); loadProjects(); loadRFQs(); },[]);
 
-  const handleAddSupp   = async (form) => { setSaving(true); try{ await db.suppliers.insert({...form,id:"sup_"+Date.now()}); await loadSuppliers(); setModal(null); }catch{} setSaving(false); };
-  const handleEditSupp  = async (form) => { setSaving(true); try{ await db.suppliers.update(form.id,form); await loadSuppliers(); setModal(null); }catch{} setSaving(false); };
+  const cleanSupp = (form) => Object.fromEntries(Object.entries(form).map(([k,v]) => [k, v === "" ? null : v]));
+  const handleAddSupp   = async (form) => { setSaving(true); try{ await db.suppliers.insert({...cleanSupp(form),id:"sup_"+Date.now()}); await loadSuppliers(); setModal(null); }catch{} setSaving(false); };
+  const handleEditSupp  = async (form) => { setSaving(true); try{ await db.suppliers.update(form.id,cleanSupp(form)); await loadSuppliers(); setModal(null); }catch{} setSaving(false); };
   const handleDelSupp   = async (s)    => { setSaving(true); try{ await db.suppliers.delete(s.id); await loadSuppliers(); setModal(null); }catch{} setSaving(false); };
 
   const goToRegister = () => { setHistoryKey(k=>k+1); setTab("rfqregister"); loadRFQs(); };
